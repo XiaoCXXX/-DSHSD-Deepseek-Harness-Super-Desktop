@@ -1,0 +1,29 @@
+{
+  "name": "dsh-desktop-client",
+  "version": "0.1.1",
+  "description": "DSH 桌面客户端 —— 随包自带 DeepSeek Harness，无需 Node.js / pnpm / npx 即可安装使用",
+  "main": "main.js",
+  "type": "commonjs",
+  "scripts": {
+    "start": "electron .",
+    "dev": "electron . --dev",
+    "stage": "node tools/stage-vendor.js",
+    "build": "npm run stage && electron-builder --config electron-builder.config.js --win nsis --publish never",
+    "build:dir": "npm run stage && electron-builder --config electron-builder.config.js --win --dir --publish never",
+    "verify:packaged": "node tools/verify-packaged.js",
+    "verify:build": "node tools/verify-build.js",
+    "verify:ui": "node tools/verify.js",
+    "verify:lifecycle": "node tools/verify-lifecycle.js",
+    "icon": "node tools/run-electron.js tools/make-icon.js",
+    "preview": "node tools/run-electron.js tools/preview-overlay.js"
+  },
+  "author": "",
+  "license": "MIT",
+  "devDependencies": {
+    "electron": "^44.3.0",
+    "electron-builder": "^26.15.3"
+  },
+  "dependencies": {
+    "js-yaml": "^4.3.2"
+  }
+}

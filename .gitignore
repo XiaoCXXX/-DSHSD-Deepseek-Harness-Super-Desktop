@@ -1,0 +1,26 @@
+# 依赖与构建产物
+node_modules/
+dist/
+vendor/
+
+# 运行时产物与测试沙箱（可能含凭据，绝不提交）
+.verify/
+.packtest/
+.verify-*/
+*.log
+
+# 临时/备份
+*.bak
+*.bak-*
+.shot-*.png
+.env
+.env.*
+
+# 编辑器
+.vscode/
+.idea/
+Thumbs.db
+Desktop.ini
+
+# Windows 快捷方式（含绝对路径，不进仓库）
+*.lnk

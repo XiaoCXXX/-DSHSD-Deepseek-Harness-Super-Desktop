@@ -1,0 +1,372 @@
+/* 悬浮选项栏 / 全面控制台样式。
+ *
+ * 颜色一律走 theme-tokens.css 的 --c-* 令牌（由 lib/themes.js 生成，工具为
+ * tools/gen-theme-css.js），主题切换只换令牌、不动这里的规则。
+ *
+ * 两种形态：
+ *   body[data-surface="bar"]     右上角悬浮条（服务启动中 / 运行中）
+ *   body[data-surface="console"] 铺满窗口的全面控制台（服务未运行）
+ */
+
+* { box-sizing: border-box; }
+
+html { background: transparent; }
+
+body {
+  margin: 0;
+  padding: 8px;
+  width: max-content;
+  background: transparent;
+  color: var(--c-text);
+  font: 12.5px/1.5 "Segoe UI", "Microsoft YaHei UI", system-ui, sans-serif;
+  user-select: none;
+}
+
+#root {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  align-items: flex-end;
+}
+
+/* 控制台专有标题，悬浮条形态不显示 */
+.console-title,
+.console-sub { display: none; }
+
+/* ---------------------------------------------------------------- 悬浮条 */
+
+.bar {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  padding: 6px 8px;
+  background: var(--c-panel);
+  border: 1px solid var(--c-border);
+  border-radius: 11px;
+  box-shadow: var(--c-shadow);
+  white-space: nowrap;
+}
+
+.dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--c-text-mute);
+  flex: none;
+}
+.dot.running { background: var(--c-success); }
+.dot.external { background: var(--c-accent); }
+.dot.starting, .dot.stopping { background: var(--c-warning); }
+
+.bar-state { font-size: 12px; font-weight: 500; }
+.bar-balance { font-size: 11.5px; color: var(--c-success); font-variant-numeric: tabular-nums; }
+.spacer { width: 4px; }
+
+.icon-btn {
+  width: 24px;
+  height: 24px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  font: inherit;
+  font-size: 11px;
+  color: var(--c-text);
+  background: var(--c-btn);
+  border: 1px solid var(--c-btn-border);
+  border-radius: 7px;
+  cursor: pointer;
+}
+.icon-btn:hover:not(:disabled) { background: var(--c-btn-hover); }
+.icon-btn:disabled { opacity: .3; cursor: not-allowed; }
+.icon-btn.accent { background: var(--c-accent-soft); border-color: var(--c-accent); color: var(--c-accent-strong); }
+
+/* ---------------------------------------------------------------- 面板 */
+
+.panel {
+  width: 380px;
+  max-height: 640px;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  background: var(--c-panel);
+  border: 1px solid var(--c-border);
+  border-radius: 12px;
+  box-shadow: var(--c-bar-shadow);
+  padding: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.panel.hidden { display: none; }
+.panel::-webkit-scrollbar { width: 8px; }
+.panel::-webkit-scrollbar-thumb { background: var(--c-scroll); border-radius: 5px; }
+
+/* ---------------------------------------------------------------- 折叠栏 */
+
+.acc {
+  background: var(--c-surface);
+  border: 1px solid var(--c-border-soft);
+  border-radius: 10px;
+  padding: 6px;
+}
+
+.acc-head {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 10px;
+  font: inherit;
+  font-size: 12.5px;
+  font-weight: 500;
+  color: var(--c-text);
+  background: var(--c-surface-2);
+  border: 1px solid var(--c-border-soft);
+  border-radius: 9px;
+  cursor: pointer;
+  text-align: left;
+}
+.acc-head:hover { background: var(--c-btn-hover); }
+.acc.open > .acc-head { border-color: var(--c-border-strong); background: var(--c-surface-3); }
+
+.chev { margin-left: auto; color: var(--c-text-mute); font-size: 10px; transition: transform .15s; }
+.chev::after { content: "▾"; }
+.acc.open .chev { transform: rotate(180deg); }
+
+.badge {
+  padding: 1px 7px;
+  font-size: 10.5px;
+  color: var(--c-text-dim);
+  background: var(--c-input-bg);
+  border: 1px solid var(--c-border);
+  border-radius: 999px;
+}
+
+.acc-body { display: none; padding: 9px 3px 3px; }
+.acc.open .acc-body { display: block; }
+
+/* ---------------------------------------------------------------- 通用 */
+
+.meta { margin: 0 0 8px; font-size: 11px; color: var(--c-text-mute); font-family: Consolas, monospace; word-break: break-all; }
+.hint { margin: 8px 0 0; font-size: 11px; color: var(--c-text-mute); }
+.hint.error { color: var(--c-danger); }
+
+.row { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+.row + .row { margin-top: 6px; }
+.row.between { justify-content: space-between; }
+
+.btn {
+  padding: 6px 11px;
+  font: inherit;
+  font-size: 12px;
+  color: var(--c-text);
+  background: var(--c-btn);
+  border: 1px solid var(--c-btn-border);
+  border-radius: 7px;
+  cursor: pointer;
+}
+.btn:hover:not(:disabled) { background: var(--c-btn-hover); }
+.btn:disabled { opacity: .35; cursor: not-allowed; }
+.btn.primary { background: var(--c-primary-bg); border-color: var(--c-primary-border); color: var(--c-primary-text); }
+.btn.danger { background: var(--c-danger-btn-bg); border-color: var(--c-danger-btn-border); color: var(--c-danger-btn-text); }
+.btn.ghost { background: transparent; }
+.btn.tiny { padding: 4px 9px; font-size: 11px; }
+
+input[type="text"], input[type="number"], input:not([type]) {
+  font: inherit;
+  font-size: 11.5px;
+  color: var(--c-text);
+  background: var(--c-input-bg);
+  border: 1px solid var(--c-btn-border);
+  border-radius: 6px;
+  padding: 5px 8px;
+  min-width: 0;
+}
+input:focus { outline: none; border-color: var(--c-accent); }
+
+/* ---------------------------------------------------------------- 项目 */
+
+.project {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 7px 8px;
+  background: var(--c-item-bg);
+  border: 1px solid var(--c-border);
+  border-radius: 8px;
+}
+.project + .project { margin-top: 5px; }
+.project.active { border-color: var(--c-active-item-border); background: var(--c-active-item-bg); }
+
+.project .radio {
+  width: 13px;
+  height: 13px;
+  border-radius: 50%;
+  border: 2px solid var(--c-border-strong);
+  flex: none;
+  cursor: pointer;
+}
+.project.active .radio { border-color: var(--c-accent); background: var(--c-accent); box-shadow: inset 0 0 0 2px var(--c-active-item-bg); }
+
+.project .info { flex: 1; min-width: 0; }
+.project .name { font-size: 12px; }
+.project .path { font-size: 10.5px; color: var(--c-text-mute); font-family: Consolas, monospace; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.project .port { font-size: 10.5px; color: var(--c-text-dim); font-family: Consolas, monospace; flex: none; }
+.project .row-actions { display: flex; gap: 4px; flex: none; }
+
+.editor { display: grid; grid-template-columns: 1fr 1fr; gap: 5px; width: 100%; }
+.editor .with-btn { display: flex; gap: 5px; }
+.editor .with-btn input { flex: 1; }
+.editor .full { grid-column: 1 / -1; display: flex; gap: 5px; }
+.editor .full input { flex: 1; }
+
+/* ---------------------------------------------------------------- 插件 */
+
+.plugins { display: flex; flex-direction: column; gap: 5px; }
+.plugin {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 7px 8px;
+  background: var(--c-item-bg);
+  border: 1px solid var(--c-border);
+  border-radius: 8px;
+}
+.plugin .info { flex: 1; min-width: 0; }
+.plugin .name { font-size: 11.5px; font-family: Consolas, monospace; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.plugin .sub { font-size: 10.5px; color: var(--c-text-mute); }
+.plugin .tag { font-size: 10px; padding: 1px 6px; border-radius: 999px; border: 1px solid var(--c-tag-border); color: var(--c-tag-text); flex: none; }
+.plugin .row-actions { display: flex; gap: 4px; flex: none; }
+
+.install-row { display: flex; gap: 5px; margin-top: 7px; }
+.install-row input { flex: 1; }
+
+/* ---------------------------------------------------------------- 日志 */
+
+.chips { display: flex; gap: 4px; }
+.chip {
+  font: inherit;
+  font-size: 10.5px;
+  padding: 2px 8px;
+  border-radius: 999px;
+  border: 1px solid var(--c-border);
+  background: transparent;
+  color: var(--c-text-mute);
+  cursor: pointer;
+}
+.chip.active { color: var(--c-text); background: var(--c-surface-3); border-color: var(--c-border-strong); }
+
+.logs {
+  margin: 7px 0 0;
+  height: 200px;
+  overflow-y: auto;
+  padding: 8px 9px;
+  background: var(--c-logs-bg);
+  border: 1px solid var(--c-border);
+  border-radius: 8px;
+  font: 10.5px/1.55 Consolas, "Cascadia Mono", monospace;
+  white-space: pre-wrap;
+  word-break: break-all;
+  user-select: text;
+}
+.logs::-webkit-scrollbar { width: 8px; }
+.logs::-webkit-scrollbar-thumb { background: var(--c-scroll); border-radius: 4px; }
+.logs .src-server { color: var(--c-accent); }
+.logs .src-client { color: var(--c-text-mute); }
+.logs .src-plugin { color: var(--c-warning); }
+.logs .ts { color: var(--c-text-mute); }
+
+/* ---------------------------------------------------------------- 设置 */
+
+.toggle { display: flex; align-items: center; gap: 8px; font-size: 12px; color: var(--c-text-dim); cursor: pointer; padding: 3px 0; }
+.toggle input { width: 14px; height: 14px; accent-color: var(--c-accent); cursor: pointer; }
+.toggle:hover { color: var(--c-text); }
+
+.field { display: flex; align-items: center; gap: 8px; font-size: 12px; color: var(--c-text-dim); padding: 3px 0; }
+.field > span { flex: none; }
+.field select {
+  font: inherit;
+  font-size: 11.5px;
+  color: var(--c-text);
+  background: var(--c-input-bg);
+  border: 1px solid var(--c-btn-border);
+  border-radius: 6px;
+  padding: 4px 8px;
+  flex: 1;
+  cursor: pointer;
+}
+
+.env { margin: 9px 0 0; display: grid; grid-template-columns: 88px 1fr; gap: 3px 10px; }
+.env dt { color: var(--c-text-mute); font-size: 10.5px; }
+.env dd { margin: 0; font-size: 10.5px; font-family: Consolas, monospace; color: var(--c-text-dim); word-break: break-all; user-select: text; }
+.env dd.bad { color: var(--c-danger); }
+
+.acc-body > .row:last-child { margin-top: 9px; }
+
+/* ================================================================ 全面控制台
+ * 服务未运行时的形态：铺满窗口、五个面板全部展开成网格，颜色取不透明页面底色。
+ */
+
+body[data-surface="console"] {
+  width: auto;
+  min-height: 100vh;
+  padding: 16px 20px 24px;
+  background: var(--c-page);
+}
+
+body[data-surface="console"] #root {
+  align-items: stretch;
+  gap: 14px;
+  max-width: 1400px;
+  margin: 0 auto;
+}
+
+body[data-surface="console"] .console-title {
+  display: block;
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--c-text);
+}
+
+body[data-surface="console"] .console-sub {
+  display: block;
+  font-size: 11.5px;
+  color: var(--c-text-mute);
+}
+
+body[data-surface="console"] .bar {
+  padding: 12px 16px;
+  border-radius: 14px;
+  box-shadow: var(--c-shadow);
+  white-space: normal;
+}
+
+body[data-surface="console"] .bar-state { font-size: 14px; }
+body[data-surface="console"] .bar-balance { font-size: 13px; }
+
+/* 控制台里不需要「展开/收起」按钮：内容本来就是全展开的 */
+body[data-surface="console"] #btnToggle { display: none; }
+
+body[data-surface="console"] .panel {
+  width: auto;
+  max-height: none;
+  overflow: visible;
+  padding: 0;
+  background: transparent;
+  border: 0;
+  box-shadow: none;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(400px, 1fr));
+  gap: 10px;
+  align-items: start;
+}
+body[data-surface="console"] .panel.hidden { display: none; }
+
+body[data-surface="console"] .acc { padding: 8px; }
+body[data-surface="console"] .logs { height: 280px; }
+
+/* 日志面板横跨两列（窄窗口退回一列） */
+body[data-surface="console"] .acc[data-key="logs"] { grid-column: span 2; }
+@media (max-width: 900px) {
+  body[data-surface="console"] .acc[data-key="logs"] { grid-column: span 1; }
+}
