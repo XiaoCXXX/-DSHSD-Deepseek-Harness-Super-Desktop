@@ -24,3 +24,7 @@ Desktop.ini
 
 # Windows 快捷方式（含绝对路径，不进仓库）
 *.lnk
+
+# 发布脚本（读取本机凭据管理器，不进仓库）
+tools/publish-release.js
+tools/update-release-notes.js

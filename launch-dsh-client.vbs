@@ -1,4 +1,4 @@
-' 静默启动 DSH 桌面客户端：不弹黑框，直接拉起 Electron 应用。
+' Silently launch the DSH desktop client: no console window, straight to the Electron app.
 Option Explicit
 
 Dim shell, fso, root

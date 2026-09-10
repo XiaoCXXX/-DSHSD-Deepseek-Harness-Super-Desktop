@@ -1,287 +1,310 @@
-# DSH 桌面客户端
-⚠️注意：本项目完全由deepseek编写，甚至以下介绍的主体也是deepseek干的，我只负责维护，命令ds干活和检查信息的正确性
+# DSH Desktop Client
 
-把 DeepSeek Harness 装进一个真正的桌面应用：**双击即用，不用敲命令、不用开浏览器，也不用先装 Node.js**。
+**English** | [中文](README.zh.md)
 
-安装包**自带 DSH 本体**，开箱即可运行；DSH 界面铺满窗口，所有控制项以**悬浮选项栏**浮在右上角。
-本客户端为dsh的功能提供了延伸，你可以在未启动的情况下通过客户端进行配置。本客户端同时拥有主题功能。
+> ⚠️ Note: this project was written entirely by DeepSeek — including most of this document. I only maintain it: I direct the agent and verify that the information is correct.
+
+Puts DeepSeek Harness into a real desktop application: **double-click and go — no commands to type, no browser to open, and no need to install Node.js first.**
+
+The installer **ships DSH itself**, so it runs out of the box. The DSH UI fills the window and every control lives in a **floating panel** pinned to the top-right corner. The client extends DSH: you can configure things while the service is stopped, and it adds a full theming system.
 
 ---
 
-## 给最终用户
-由于deepseek自行写的说明书是为了解析本客户端原理的，以下为极简使用方式：
-从release中下载安装包
-安装客户端
-双击客户端快捷方式启动
+## For end users
 
-首次启动需要配置你的api-key，这显而易见
+The long sections below explain how the client works internally. The short version:
 
-### 安装
+1. Download the installer from [Releases](../../releases)
+2. Install the client
+3. Double-click the client shortcut
 
-双击 `DSH-Client-Setup-<版本>.exe`（当前为 `DSH-Client-Setup-0.1.2.exe`），一路下一步即可（默认装到当前用户目录，无需管理员权限），
-安装完桌面会多一个 **DSH 客户端** 快捷方式。
+On first launch you need to configure your own API key — that part should be obvious.
 
-**目标机器不需要预装 Node.js / pnpm / npx** —— 安装包里已经带了。
+### Install
 
-### 首次启动
+Double-click `DSH-Client-Setup-<version>.exe` (currently `DSH-Client-Setup-0.1.2.exe`) and keep clicking Next.
+It installs into your user folder, so no administrator rights are needed, and adds a **DSH Client** shortcut to your desktop.
 
-双击快捷方式。客户端会自动：
+**The target machine does not need Node.js, pnpm or npx** — everything is bundled.
 
-1. 在 `%USERPROFILE%\.dsh` 下创建 DSH 的 web profile；
-2. 把随包附带的小鲸鱼余额挂件装好并启用；
-3. 拉起 DSH 服务并直接显示界面。
+### First launch
 
-**每个使用者都必须配置自己的 `DEEPSEEK_API_KEY`**，获取api-key请前往deepseek官网的开放平台
+Double-click the shortcut. The client will:
 
-> 关闭窗口只会最小化到**托盘**，服务继续运行。要真正退出请点悬浮栏「设置」里的 **退出客户端**，或托盘右键 → 退出。
+1. create DSH's web profile under `%USERPROFILE%\.dsh`;
+2. install and enable the bundled whale balance widget;
+3. start the DSH service and show its UI.
 
-### 界面
+**Every user must configure their own `DEEPSEEK_API_KEY`.** Get one from the DeepSeek open platform.
+DSH itself prompts for it on first run — you never have to go hunting for a config file.
+
+> Closing the window only minimizes to the **tray**; the service keeps running. To really quit, use
+> **Quit client** in the panel's Settings section, or right-click the tray icon → Quit.
+
+### UI
 
 ```
-┌─ 窗口（DSH 界面铺满）──────────────┐
-│                    ┌─────────────┐ │
-│                    │● 运行中·接管 │ │ ← 悬浮条常驻右上角
-│                    │ CNY 147.18  │ │
-│                    │ ▶ ■ ⟳ ⋯    │ │
-│                    └─────────────┘ │
-└────────────────────────────────────┘
+┌─ Window (DSH UI fills it)───────────┐
+│                    ┌─────────────┐  │
+│                    │● Running    │  │ ← floating bar, top-right
+│                    │ CNY 147.18  │  │
+│                    │ ▶ ■ ⟳ ⋯     │  │
+│                    └─────────────┘  │
+└─────────────────────────────────────┘
 ```
 
-点 `⋯` 展开成五个可折叠选项栏：
+Click `⋯` to expand five collapsible sections:
 
-| 选项栏 | 内容 |
+| Section | Contents |
 |---|---|
-| **服务** | 端口 / PID / 已运行时长 / 工作目录，启动·停止·重启·在浏览器打开 |
-| **项目** | 项目列表（工作目录 + 端口），新建 / 编辑 / 删除 / 切换 |
-| **插件** | 已安装插件清单（版本、是否界面层），逐个更新 / 卸载，也可填包名安装 |
-| **日志** | 服务端 / 客户端 / 插件三类输出，可筛选、清空、打开日志文件 |
-| **设置** | 开机自启、自动拉起服务等开关，界面主题与界面语言，自动切换界面，环境探测结果，隐藏窗口，退出客户端 |
+| **Service** | port / PID / uptime / working directory; start · stop · restart · open in browser |
+| **Projects** | project list (working directory + port); create / edit / delete / switch |
+| **Plugins** | installed plugins (version, whether it is a UI layer); update / uninstall, or install by package name |
+| **Logs** | server / client / plugin output; filter, clear, open the log file |
+| **Settings** | launch at login, auto-start, theme, language, auto view switching, environment probe, hide window, quit |
 
-双击悬浮条空白处也能开合；展开后按 `Esc` 收起。
+Double-clicking an empty part of the bar also toggles it; press `Esc` to collapse.
 
-界面切换、折叠栏开合、按键按下都带过渡动画；切换主题时颜色会平滑渐变，
-并且会跟随系统的「减少动态效果」设置自动关闭动画。
+View switches, section expand/collapse and button presses are all animated; switching themes fades
+colors smoothly. Animations are disabled automatically when the system asks for reduced motion.
 
-### 两种界面形态与手动切换
+### Two view modes, switched manually
 
-客户端有两个形态：**悬浮条 + DSH 界面**（`bar`）与**铺满窗口的客户端控制台**（`console`）。
+The client has two modes: **floating bar + DSH UI** (`bar`) and **full-window client console** (`console`).
 
-默认是**手动切换**：悬浮条右上角的 `▣` 按钮切到控制台，控制台头部的「返回 DSH 界面」切回来；
-手动选择会记住，下次启动仍是你选的那个。
+By default you switch **manually**: the `▣` button in the bar opens the console, and
+**Back to DSH** in the console header returns. Your choice is remembered across restarts.
 
-想让形态随服务启停自动切换（停止时铺开控制台、运行中缩回悬浮条），打开
-**设置 → 服务启停时自动切换界面**。点手动切换按钮会隐含关闭该开关——
-否则下一次服务状态变化就会把你手动选的形态顶掉。
+To let the mode follow the service instead (console when stopped, bar when running), enable
+**Settings → Switch the view automatically with the service**. Clicking the manual switch turns that
+setting off implicitly — otherwise the next service state change would override your choice.
 
-### 界面语言
+### UI language
 
-支持**中文 / English**，在「设置 → 界面语言」里切换，一处同时作用于：
+Supports **Chinese / English**. Switch under **Settings → Language**; one switch affects both:
 
-- 本客户端界面（悬浮栏、控制台、托盘菜单）
-- DSH 自身界面 —— 通过写入 `$DSH_HOME/settings.yaml` 的 `locale.preference`（`zh` / `en`）
+- this client (panel, console, tray menu)
+- the DSH UI itself — by writing `locale.preference` (`zh` / `en`) into `$DSH_HOME/settings.yaml`
 
-DSH 用 chokidar 监听该文件，因此**切换即时生效，不需要重启服务**；写入时会保留文件里
-其它命名空间的内容（例如 `ui-onboarding`）。客户端启动时也会同步一次，保证两边一致——
-也就是说**客户端是语言的唯一入口**，若在 DSH 自己的设置里改语言，下次启动会被同步回来。
+DSH watches that file with chokidar, so **the change applies immediately with no service restart**.
+The write preserves other namespaces in the file (such as `ui-onboarding`). The client also syncs once
+at startup so both sides agree — in other words **the client is the single source of truth for language**;
+if you change it in DSH's own settings, the next client start will sync it back.
 
-日志也跟随语言：客户端自己产生的行（启动、接管、签发 cookie、插件命令等）按当前语言输出；
-**DSH 服务端与 pnpm 的输出原样透传，不翻译**。已产生的历史日志保持当时的语言不变。
+Logs follow the language too: lines produced by the client itself (startup, adoption, cookie minting,
+plugin commands) are written in the current language, while **DSH server and pnpm output is passed through
+untranslated**. Existing log lines keep the language they were written in.
 
 ---
 
-## 架构
+## Architecture
 
-### 单窗口分层
+### Single window, layered views
 
-一个 `BrowserWindow` 里叠了三个 `WebContentsView`：
+One `BrowserWindow` stacks two `WebContentsView`s:
 
 ```
-┌─ 窗口 ────────────────────────────────────┐
-│  dshView          DSH 本体界面（铺满）      │  ← 运行时显示
-│  overlayView      悬浮选项栏（透明、置顶）  │  ← 始终在最上层
+┌─ Window ──────────────────────────────────┐
+│  dshView        DSH UI (fills the window) │  ← shown while running
+│  overlayView    floating panel (transparent, on top) │  ← always on top
 └───────────────────────────────────────────┘
 ```
 
-**关键点**：悬浮栏视图的大小会被精确设置成它自身内容的尺寸（收起时约 320×54，展开时约 396×702）。
-这样面板以外的区域在系统层面就不属于悬浮栏视图，鼠标事件会照常落到下面的 DSH 界面上——
-不会出现「透明遮罩挡住点击」的问题。悬浮栏锚定**右上角**，避开右下角的小鲸鱼挂件。
+**The key trick**: the overlay view is sized to exactly its own content (about 320×54 collapsed,
+396×702 expanded). Areas outside the panel therefore do not belong to the overlay view at the OS level,
+so mouse events reach the DSH UI underneath — there is no "invisible mask swallowing clicks".
+The panel is anchored **top-right** to stay clear of the whale widget in the bottom-right corner.
 
-### 运行时（两种模式）
+### Runtime (two modes)
 
-`lib/runtime.js` 按优先级解析：
+`lib/runtime.js` resolves in priority order:
 
-| 模式 | 何时使用 | node | dsh |
+| Mode | When | node | dsh |
 |---|---|---|---|
-| **bundled** | 存在 `resources/dsh/`（安装包形态） | **Electron 自带的 Node**（`ELECTRON_RUN_AS_NODE=1`） | `resources/dsh/node_modules/@deepseek-ai/dsh` |
-| **system** | 开发期 / 未打包 | 系统 `node.exe` | npx 缓存或全局安装的 dsh |
+| **bundled** | `resources/dsh/` exists (installed build) | **Electron's built-in Node** (`ELECTRON_RUN_AS_NODE=1`) | `resources/dsh/node_modules/@deepseek-ai/dsh` |
+| **system** | development / not packaged | system `node.exe` | npx cache or globally installed dsh |
 
-打包形态不需要单独分发 `node.exe`，直接用 Electron 内置的 Node 24。
+The packaged build does not need to ship a separate `node.exe`; it uses Electron's built-in Node 24.
 
-> **必须带 `--expose-internals`**：DSH 的 HMR 服务需要 Node 内部模块。
-> `cordis-plugin-loader` 有两条获取路径——带该标志时走 `require()`，否则回落到原生插件
-> `node-addon-require-builtin`；后者是按系统 Node 的 ABI 编译的，在 Electron 下加载会失败。
-> 所以 bundled 模式始终传这个标志（`lib/runtime.js` 里有注释说明）。
+> **`--expose-internals` is required.** DSH's HMR service needs Node internals.
+> `cordis-plugin-loader` has two ways to get them — with that flag it uses `require()`, otherwise it
+> falls back to the native addon `node-addon-require-builtin`, which is compiled against system Node's
+> ABI and fails to load under Electron. So bundled mode always passes the flag (see `lib/runtime.js`).
 
-### 首次运行的环境准备
+### First-run provisioning
 
-`lib/provision.js` 不依赖 pnpm：
+`lib/provision.js` does not depend on pnpm:
 
-1. 若 profile 不存在，按 DSH 自带模板生成 `package.json` / `cordis.patch.yml` / `pnpm-workspace.yaml`；
-2. 把 `resources/plugins/dsh-whale-widget` 复制进 profile 的 `node_modules`（**仅在缺失时**，
-   不覆盖用户自己装的版本）；
-3. 把插件名写进 `dsh.profile.bundles`。
+1. if the profile does not exist, generate `package.json` / `cordis.patch.yml` / `pnpm-workspace.yaml`
+   from DSH's own template;
+2. copy `resources/plugins/dsh-whale-widget` into the profile's `node_modules`
+   (only when missing; if the profile already has one, it is upgraded only when the bundled version is newer);
+3. add the plugin name to `dsh.profile.bundles`.
 
-> 为什么必须复制到 profile 的 `node_modules`：bundle 是以 **ES module 从 profile 目录 import** 的，
-> 只放在 DSH 安装锚点虽然能被 `resolveBundleDir` 找到，但 import 时会 `ERR_MODULE_NOT_FOUND`。
+> Why it must be copied into the profile's `node_modules`: a bundle is imported as an **ES module from
+> the profile directory**. Leaving it only at the DSH install anchor lets `resolveBundleDir` find it,
+> but the import itself fails with `ERR_MODULE_NOT_FOUND`.
 
-### 关于认证（为什么不用手动登录）
+### Authentication (why there is no manual login)
 
-DSH 每次启动会生成一个随机令牌，并把带 `?token=...` 的 URL 打印到 stdout；
-访问该 URL 后服务器会写入一个绑定 `host:port` 的签名 cookie（有效期 30 天）。客户端两条路都走：
+DSH generates a random token at startup and prints a URL containing `?token=...` to stdout.
+Visiting that URL makes the server set a signed cookie bound to `host:port` (valid for 30 days).
+The client uses both routes:
 
-1. 自己启动服务时 → 直接从 stdout 抓取令牌；
-2. 接管别人启动的服务时 → 用凭据库里的签名密钥**自行签发**同样的 cookie。
+1. when it starts the service itself → it reads the token straight from stdout;
+2. when it adopts a service someone else started → it **mints the same cookie itself** using the signing
+   key from the credential store.
 
-签名算法（`lib/auth-cookie.js` 复刻自 `@deepseek-ai/dsh-client-connection`）：
+The signing scheme (`lib/auth-cookie.js`, mirrored from `@deepseek-ai/dsh-client-connection`):
 
 ```
-cookie 名 = "dsh-auth-" + base64url(sha256(authority))
-cookie 值 = "v1." + base64url(JSON{version,authority,issuedAt,expiresAt})
-                  + "." + base64url(HMAC-SHA256(secret, <中间的 base64url 串>))
-密钥      = $DSH_HOME/.credentials.yaml 中 client-connection/browser-session 的 payload.secret
+cookie name  = "dsh-auth-" + base64url(sha256(authority))
+cookie value = "v1." + base64url(JSON{version,authority,issuedAt,expiresAt})
+                    + "." + base64url(HMAC-SHA256(secret, <the middle base64url string>))
+secret       = payload.secret of client-connection/browser-session in $DSH_HOME/.credentials.yaml
 ```
 
-因为密钥持久化在凭据库、cookie 绑定的是 `127.0.0.1:<端口>` 而非进程，所以**跨服务器重启依然有效**。
+Because the key is persisted in the credential store and the cookie is bound to `127.0.0.1:<port>`
+rather than to a process, it **stays valid across service restarts**.
 
 ---
 
-## 开发
+## Development
 
 ```powershell
 npm install
-npm start                      # 开发运行（使用系统 node + 已安装的 dsh）
-npm start -- --hidden          # 不显示任何窗口，便于自动化验证
+npm start                      # dev run (system node + installed dsh)
+npm start -- --hidden          # no windows at all, for automation
 
-node tools/selftest.js         # 不依赖 Electron 的能力自检（含 cookie 签发验证）
-node tools/verify.js           # 界面/结构验证 + 截图（.verify\）
-node tools/verify-lifecycle.js # 独立端口真实跑 启动→重启→停止
-node tools/verify-packaged.js  # 全新 DSH_HOME 下验证「随包 DSH」运行链路
-electron tools/preview-overlay.js  # 只渲染悬浮栏并截图，快速迭代外观
-electron tools/make-icon.js    # 重新生成 assets/icon.ico
+node tools/selftest.js         # capability self-check without Electron (includes cookie minting)
+node tools/verify.js           # UI/structure verification + screenshots (.verify\)
+node tools/verify-lifecycle.js # real start → restart → stop on a spare port
+node tools/verify-packaged.js  # bundled-DSH runtime against a fresh DSH_HOME
+node tools/verify-i18n-live.js # language switching, animations, surface toggle
+node tools/run-electron.js tools/preview-overlay.js  # render just the panel and screenshot it
+node tools/run-electron.js tools/make-icon.js        # regenerate assets/icon.ico
 ```
 
-### 打包
+### Build
 
 ```powershell
-npm run build        # 生成 dist\DSH-Client-Setup-<version>.exe
-npm run build:dir    # 只出免安装目录 dist\win-unpacked（调试用）
-npm run verify:build # 验证产物：用独立端口跑打包后的 exe 并检查路由
+npm run build        # produces dist\DSH-Client-Setup-<version>.exe
+npm run build:dir    # unpacked directory only (dist\win-unpacked), for debugging
+npm run verify:build # verify the artifact: run the packaged exe and probe its routes
 ```
 
-物料准备由 `tools/stage-vendor.js` 完成：
+Vendor staging is done by `tools/stage-vendor.js`:
 
-- `vendor/dsh/` —— 通过 `npm install @deepseek-ai/dsh@<版本>` 拉取的 DSH 本体（约 212 MB）
-- `vendor/plugins/dsh-whale-widget/` —— 随包挂件
+- `vendor/dsh/` — the DSH runtime, installed with `npm install @deepseek-ai/dsh@<version>` (~212 MB)
+- `vendor/plugins/dsh-whale-widget/` — the bundled widget (fetched from its upstream repo if absent)
 
-可用环境变量覆盖：`DSH_VERSION`（默认 `0.1.5-rc.1`）、`WHALE_SOURCE`（挂件来源目录）。
+Overridable via environment variables: `DSH_VERSION` (default `0.1.5-rc.1`), `WHALE_SOURCE`.
 
-> **维护者注意**：electron-builder 的过滤器
-> （`app-builder-lib/out/util/filter.js`）会**无条件排除**相对路径等于或以 `/node_modules`
-> 结尾的目录，`extraResources` 里整棵 `node_modules` 都不会被复制（`filter: ["**/*"]` 也救不了）。
-> 因此 `electron-builder.config.js` 在构建时枚举出所有 `node_modules` 目录，
-> 把 `from` 指到每一层的**内部**，让相对路径变成各包名而非 `node_modules` 本身。
+> **Maintainer note**: electron-builder's filter
+> (`app-builder-lib/out/util/filter.js`) **unconditionally excludes** any directory whose relative path
+> is or ends with `/node_modules`, so an entire `node_modules` tree is silently dropped from
+> `extraResources` (`filter: ["**/*"]` does not help). `electron-builder.config.js` therefore enumerates
+> every `node_modules` directory at build time and points `from` *inside* each one, so the relative paths
+> become package names instead of `node_modules`.
 
-### 目录
+### Layout
 
 ```
 dsh-client/
-├── main.js                     Electron 主进程（单窗口三视图、托盘、IPC、余额轮询）
-├── preload.js                  contextBridge 安全桥
-├── electron-builder.config.js  打包配置（动态生成 extraResources）
+├── main.js                     Electron main process (single window, views, tray, IPC, balance polling)
+├── preload.js                  contextBridge safety bridge
+├── electron-builder.config.js  packaging config (dynamic extraResources)
 ├── lib/
-│   ├── runtime.js              运行时解析（bundled / system）+ 安全开关说明
-│   ├── provision.js            首次运行的 profile 准备与插件预装
-│   ├── config.js               配置持久化与多项目
-│   ├── dsh-locator.js          定位 node / dsh / 挂件资源
-│   ├── auth-cookie.js          自行签发会话 cookie
-│   ├── server-manager.js       服务进程生命周期
-│   └── logger.js               环形缓冲 + 落盘日志
+│   ├── runtime.js              runtime resolution (bundled / system) + the flag rationale
+│   ├── provision.js            first-run profile setup and plugin pre-install
+│   ├── i18n.js                 zh/en dictionaries shared by main and renderer
+│   ├── dsh-settings.js         writes DSH's own language preference
+│   ├── config.js               persisted config and projects
+│   ├── dsh-locator.js          locates node / dsh / widget assets
+│   ├── auth-cookie.js          mints the session cookie
+│   ├── server-manager.js       service process lifecycle
+│   └── logger.js               ring buffer + file log
 ├── renderer/
-│   ├── control.html/css/js     悬浮选项栏 / 全窗口控制台
-├── tools/                      自检、验证、预览、图标、物料准备
-├── vendor/                     打包物料（dsh / plugins，构建时生成）
-└── dist/                       打包产物
+│   ├── control.html/css/js     floating panel / full-window console
+│   └── i18n.js                 renderer-side lookup
+├── tools/                      self-checks, verification, preview, icon, vendor staging
+├── vendor/                     build payload (dsh / plugins, generated)
+└── dist/                       build output
 ```
 
 ---
 
-## 配置与数据位置
+## Config and data locations
 
-| 内容 | 路径 |
+| What | Path |
 |---|---|
-| 客户端配置 | `%APPDATA%\dsh-desktop-client\config.json` |
-| 客户端日志 | `%APPDATA%\dsh-desktop-client\logs\dsh-client.log` |
-| Electron 会话（含 cookie） | `%APPDATA%\dsh-desktop-client\Partitions\` |
-| DSH 家目录 / profile | `%USERPROFILE%\.dsh\` |
-| 挂件账本 | `%USERPROFILE%\.dsh\.dshw-usage.json` |
+| Client config | `%APPDATA%\dsh-desktop-client\config.json` |
+| Client log | `%APPDATA%\dsh-desktop-client\logs\dsh-client.log` |
+| Electron session (cookies) | `%APPDATA%\dsh-desktop-client\Partitions\` |
+| DSH home / profile | `%USERPROFILE%\.dsh\` |
+| Widget usage ledger | `%USERPROFILE%\.dsh\.dshw-usage.json` |
 
 ---
 
-## 已知限制
+## Known limitations
 
-- 仅面向 Windows x64（停止进程依赖 `taskkill`，端口探测依赖 `netstat`）。
-- **插件的安装/更新/卸载仍需系统装 pnpm**（`dsh plugin` 是 pnpm 的转发器）。
-  随包内置的挂件不受影响；缺少 pnpm 时日志会给出明确提示。
-  首次运行预装挂件这条路径**不依赖 pnpm**。
-- 「停止」在接管模式下会结束端口上的监听进程——如果那是你手动启动的实例，它也会被关掉。
-- 余额与今日已用读取挂件的 `/dsh-whale/balance.json`；未配置 API Key 时显示 `--`，服务状态仍正常。
-- 本地记账模式下「今日已用」依赖余额差值，客户端未运行时产生的消耗不会被计入（挂件自身的行为）。
-- 开发提示：透明的 `WebContentsView` 无法用 CDP `Page.captureScreenshot` 截图（会超时），
-  悬浮栏外观请用 `tools/preview-overlay.js` 查看。
+- Windows x64 only (stopping processes uses `taskkill`, port probing uses `netstat`).
+- **Installing / updating / removing plugins still needs pnpm on the system** (`dsh plugin` is a pnpm
+  forwarder). The bundled widget is unaffected, and the log explains what to install when pnpm is missing.
+  The first-run widget pre-install path does **not** need pnpm.
+- **Stop** in adopted mode ends whatever process is listening on the port — including an instance you
+  started by hand.
+- Balance and today's usage come from the widget's `/dsh-whale/balance.json`; without an API key they show
+  `--` while the service still reports its state normally.
+- In local-ledger mode "used today" is derived from balance deltas, so consumption that happens while the
+  client is not running is not counted (the widget's own behaviour).
+- Dev note: a transparent `WebContentsView` cannot be captured with CDP
+  `Page.captureScreenshot` (it times out); use `tools/preview-overlay.js` to inspect the panel.
 
-### 两个容易踩的环境陷阱
+### Two environment traps worth knowing
 
-**① 不要给 DSH 注入名字含 `KEY`/`TOKEN`/`SECRET` 的环境变量。**
-`dsh-subprocess` 会按 `/KEY|PASSWORD|SECRET|TOKEN/i` 清洗传给子进程的环境
-（这是防凭据泄漏的安全设计）。曾经为了让 git 走 openssl 而注入
-`GIT_CONFIG_COUNT`/`GIT_CONFIG_KEY_0`/`GIT_CONFIG_VALUE_0`，
-结果 `KEY_0` 被清掉、另两个留下，git 直接报
-`missing config key GIT_CONFIG_KEY_0` 并**拒绝执行任何命令**。
-git 的 schannel 后端在非受限进程里本就正常，这个绕过既无必要也有害。
+**① Never inject environment variables whose names contain `KEY` / `TOKEN` / `SECRET` into DSH.**
+`dsh-subprocess` scrubs the child environment with `/KEY|PASSWORD|SECRET|TOKEN/i` (a deliberate
+credential-leak defence). Injecting `GIT_CONFIG_COUNT` / `GIT_CONFIG_KEY_0` / `GIT_CONFIG_VALUE_0`
+to force git onto openssl left `KEY_0` scrubbed while the other two survived, and git then refused to
+run anything with `missing config key GIT_CONFIG_KEY_0`. git's schannel backend works fine in an
+unrestricted process, so that workaround was both unnecessary and harmful.
 
-**② 随包 DSH 运行时会向子进程传染 `ELECTRON_RUN_AS_NODE=1`。**
-bundled 模式靠这个变量让 Electron 以 Node 模式承载 DSH，但它会留在 DSH 进程的环境里
-并被继承下去。后果：**在 DSH 会话里启动任何 Electron 程序都会以纯 Node 模式运行**
-（`require('electron').app` 为 `undefined`）而崩溃——`npm start` 本客户端就会中招。
-`tools/` 下的脚本已统一加 `delete process.env.ELECTRON_RUN_AS_NODE` 自保；
-`make-icon` / `preview-overlay` 这类本身要跑在 Electron 里的脚本请用
-`node tools/run-electron.js <脚本>` 启动。
-若想彻底消除该污染，可改为随包分发独立的 `node.exe`（代价是安装包大约 +80 MB）。
+**② The bundled DSH leaks `ELECTRON_RUN_AS_NODE=1` to its children.**
+Bundled mode uses that variable to make Electron host DSH as Node, but it stays in the DSH process
+environment and is inherited. Consequence: **launching any Electron program from inside a DSH session
+runs it as plain Node** (`require('electron').app` is `undefined`) and it crashes — `npm start` for this
+very client included. Scripts under `tools/` add `delete process.env.ELECTRON_RUN_AS_NODE` for
+self-defence; scripts that must run *inside* Electron (`make-icon`, `preview-overlay`) should be started
+with `node tools/run-electron.js <script>`. To remove the pollution entirely you would have to ship a
+separate `node.exe` (about +80 MB).
 
 ---
 
-## 第三方组件与许可
+## Third-party components and licenses
 
-本项目自身代码以 MIT 协议发布。构建产物中随包分发以下第三方组件，全部为 MIT 协议：
+This project's own code is released under MIT. The build bundles the following third-party components,
+all MIT:
 
-| 组件 | 许可 | 来源 |
+| Component | License | Source |
 |---|---|---|
-| [DeepSeek Harness](https://www.npmjs.com/package/@deepseek-ai/dsh)（`@deepseek-ai/dsh` 及其依赖） | MIT | npm，构建时由 `tools/stage-vendor.js` 拉取 |
-| [小鲸鱼余额挂件](https://github.com/MeteorNOX/DeepSeek-Balance-Whale-Widget)（`dsh-whale-widget`） | MIT © 2026 MeteorNOX | 构建时从上游仓库拉取 |
+| [DeepSeek Harness](https://www.npmjs.com/package/@deepseek-ai/dsh) (`@deepseek-ai/dsh` and its dependencies) | MIT | npm, fetched at build time by `tools/stage-vendor.js` |
+| [Whale balance widget](https://github.com/MeteorNOX/DeepSeek-Balance-Whale-Widget) (`dsh-whale-widget`) | MIT © 2026 MeteorNOX | fetched at build time from its upstream repo |
 | [Electron](https://github.com/electron/electron) | MIT | npm |
 
-关于小鲸鱼挂件：上游是 **MIT 协议**，明确允许再分发（`publish, distribute, sublicense`），
-因此安装包中随包分发该插件是合规的；插件自带的 `LICENSE` 文件会一并放进
-`resources/plugins/dsh-whale-widget/LICENSE`，满足 MIT 要求的"保留版权声明与许可全文"。
+On the whale widget: upstream is **MIT**, which explicitly permits redistribution
+(`publish, distribute, sublicense`), so bundling it in the installer is compliant. The plugin's own
+`LICENSE` file ships inside the installer at `resources/plugins/dsh-whale-widget/LICENSE`, satisfying
+MIT's requirement to preserve the copyright and permission notice.
 
-本仓库**不包含**上述第三方的源码（`vendor/` 已在 `.gitignore` 中排除），
-构建时由 `npm run stage` 自动获取。
+This repository **does not contain** the source of those third-party components (`vendor/` is excluded
+via `.gitignore`); they are fetched by `npm run stage` at build time.
 
 ---
 
-## 许可证
+## License
 
-本项目以 [MIT License](LICENSE) 发布。
+Released under the [MIT License](LICENSE).
 
-安装包中随包分发的第三方组件（DeepSeek Harness、小鲸鱼余额挂件、Electron）同样为 MIT 协议，
-各自的版权声明见其自身的 `LICENSE` 文件。
+The third-party components bundled in the installer (DeepSeek Harness, the whale widget, Electron) are
+also MIT; see their own `LICENSE` files for the respective copyright notices.
