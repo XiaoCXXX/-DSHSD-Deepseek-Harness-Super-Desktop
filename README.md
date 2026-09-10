@@ -23,7 +23,7 @@ On first launch you need to configure your own API key — that part should be o
 ### Install
 
 Double-click `DSH-Client-Setup-<version>.exe` (currently `DSH-Client-Setup-0.1.2.exe`) and keep clicking Next.
-It installs into your user folder, so no administrator rights are needed, and adds a **DSH Client** shortcut to your desktop.
+It installs into your user folder, so no administrator rights are needed, and adds a desktop shortcut for launching the client.
 
 **The target machine does not need Node.js, pnpm or npx** — everything is bundled.
 
