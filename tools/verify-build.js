@@ -40,7 +40,9 @@ function request(pathname, timeoutMs = 4000) {
 function findLog() {
   const candidates = [
     path.join(USER_DATA, 'logs', 'dsh-client.log'),
-    path.join(process.env.APPDATA || '', 'DSH Desktop Client', 'logs', 'dsh-client.log'),
+    // 打包版 package.json 里没有 productName，所以 Electron 的 userData 目录用的是
+    // package.json 的 name 字段（dsh-desktop-client），不是 productName。
+    path.join(process.env.APPDATA || '', 'dsh-desktop-client', 'logs', 'dsh-client.log'),
   ]
   return candidates.find((file) => fs.existsSync(file))
 }
