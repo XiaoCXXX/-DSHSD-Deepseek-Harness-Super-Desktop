@@ -6,6 +6,7 @@ const { contextBridge, ipcRenderer } = require('electron')
 
 contextBridge.exposeInMainWorld('dshClient', {
   getState: () => ipcRenderer.invoke('state:get'),
+  i18nMessages: () => ipcRenderer.invoke('i18n:messages'),
 
   quit: () => ipcRenderer.invoke('app:quit'),
   hideWindow: () => ipcRenderer.invoke('app:hideWindow'),
@@ -17,6 +18,7 @@ contextBridge.exposeInMainWorld('dshClient', {
 
   patchConfig: (patch) => ipcRenderer.invoke('config:patch', patch),
   setActiveProject: (id) => ipcRenderer.invoke('project:setActive', id),
+  setSurface: (value) => ipcRenderer.invoke('surface:set', value),
   upsertProject: (project) => ipcRenderer.invoke('project:upsert', project),
   removeProject: (id) => ipcRenderer.invoke('project:remove', id),
   pickDirectory: () => ipcRenderer.invoke('dialog:pickDirectory'),

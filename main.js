@@ -36,6 +36,8 @@ const { resolveRuntime, resolvePackageDir, bundledPluginDir, profileDir } = requ
 const { ensureProfile } = require('./lib/provision')
 const { surfaceForState } = require('./lib/surface')
 const { normalizeThemeId, themeList } = require('./lib/themes')
+const { t, messagesFor, normalizeLanguage, languageEntry, LANGUAGES } = require('./lib/i18n')
+const { writeDshLanguage } = require('./lib/dsh-settings')
 
 const PARTITION = 'persist:dsh'
 const WHALE_SPEC = 'github:MeteorNOX/DeepSeek-Balance-Whale-Widget'
@@ -170,26 +172,64 @@ function prepareEnvironment() {
   const result = ensureProfile({
     dir,
     plugins: [{ name: WHALE_NAME, sourceDir: whaleSource }],
-    log: (message) => logger.info(message),
+    log: (key, params) => logger.info(tr(key, params)),
   })
   if (!whaleSource) {
-    logger.error(`随包的插件 ${WHALE_NAME} 未找到，挂件将不会出现`)
+    logger.error(tr('log.whaleMissing', { name: WHALE_NAME }))
   } else if (!resolvePackageDir(WHALE_NAME, { dshRoot: runtime.dshRoot, profile: dir })) {
-    logger.error(`插件 ${WHALE_NAME} 未能安装到 profile，挂件将不会出现`)
+    logger.error(tr('log.pluginNotInstalled', { name: WHALE_NAME }))
   }
   return { ...result, runtime: runtime.mode }
 }
 
 // ---------------------------------------------------------------- 状态
 
+/** 生效的界面语言：显式配置优先，否则跟随系统语言。 */
+function effectiveLanguage() {
+  const configured = config.all().language
+  if (configured) return normalizeLanguage(configured)
+  return String(app.getLocale() || '').toLowerCase().startsWith('zh') ? 'zh' : 'en'
+}
+
+/** 当前语言的取词。 */
+function tr(key, params) {
+  return t(effectiveLanguage(), key, params)
+}
+
+/**
+ * 当前应显示的界面形态。
+ * 自动模式跟随服务状态；手动模式用用户选定的形态（未选过则按状态推导一次）。
+ * @param {string} state - 服务状态
+ * @returns {'bar'|'console'}
+ */
+function currentSurface(state) {
+  const derived = surfaceForState(state)
+  if (config.all().autoSurface) return derived
+  const manual = config.all().surface
+  return manual === 'bar' || manual === 'console' ? manual : derived
+}
+
+/** 把当前语言同步给 DSH 自身（写 $DSH_HOME/settings.yaml 的 locale.preference）。 */
+function syncLanguageToDsh() {
+  try {
+    const entry = languageEntry(effectiveLanguage())
+    const result = writeDshLanguage(dshHome(), entry.dsh)
+    if (result.changed) logger.info(tr('log.languageSynced', { language: entry.dsh, file: result.file }))
+  } catch (error) {
+    logger.error(tr('log.languageSyncFailed', { message: error?.message || error }))
+  }
+}
+
 function fullState() {
   const project = config.activeProject()
   const serverSnapshot = server ? server.snapshot() : { state: 'stopped' }
   return {
     server: serverSnapshot,
-    // 界面形态：未运行 → 全面控制台；启动中/运行中 → 悬浮条
-    surface: surfaceForState(serverSnapshot.state),
+    // 界面形态：自动模式下未运行 → 全面控制台、运行中 → 悬浮条；手动模式下取用户选定值
+    surface: currentSurface(serverSnapshot.state),
     themes: themeList(),
+    language: effectiveLanguage(),
+    languages: LANGUAGES.map((language) => ({ id: language.id, label: language.label })),
     config: config.all(),
     project,
     balance,
@@ -210,8 +250,19 @@ function fullState() {
   }
 }
 
+/**
+ * 主进程侧的当前形态。
+ * 必须与 fullState() 用同一个来源——曾经这里直接用 surfaceForState()，
+ * 忽略了手动选择，导致「渲染层按控制台铺满、视图 bounds 却还是悬浮条大小」，
+ * 界面被挤在右上角一小块且无法操作。
+ * @returns {'bar'|'console'}
+ */
+function activeSurface() {
+  return currentSurface(server ? server.snapshot().state : 'stopped')
+}
+
 function pushState() {
-  const nextSurface = surfaceForState((server ? server.snapshot() : { state: 'stopped' }).state)
+  const nextSurface = activeSurface()
   if (nextSurface !== surface) {
     surface = nextSurface
     // 形态切换立刻重排：控制台铺满窗口，悬浮条锚定右上角
@@ -236,9 +287,9 @@ function syncThemeToDsh(themeId) {
     const file = path.join(dshHome(), '.dsh-theme.json')
     fs.mkdirSync(path.dirname(file), { recursive: true })
     fs.writeFileSync(file, JSON.stringify({ theme: id, updatedAt: new Date().toISOString() }, null, 2), 'utf8')
-    logger.info(`主题已同步到 DSH：${id}`)
+    logger.info(tr('log.themeSynced', { theme: id }))
   } catch (error) {
-    logger.error(`主题同步失败：${error?.message || error}`)
+    logger.error(tr('log.themeSyncFailed', { message: error?.message || error }))
   }
 }
 
@@ -253,8 +304,8 @@ function layoutViews() {
 
 function positionOverlay(windowWidth, windowHeight) {
   if (!overlayView) return
-  // 服务未运行：控制台铺满窗口（此时下面只有占位页，不存在挡住 DSH 点击的问题）
-  if (surface === 'console') {
+  // 控制台形态：叠加视图铺满窗口（内容本来就要占满，也不需要点击穿透）
+  if (activeSurface() === 'console') {
     overlayView.setBounds({ x: 0, y: 0, width: windowWidth, height: windowHeight })
     return
   }
@@ -353,13 +404,13 @@ async function authenticate(port, token) {
         sameSite: 'strict',
         expirationDate: minted.expiresAt / 1000,
       })
-      logger.info(`已用凭据库密钥签发会话 cookie（authority=${minted.authority}）`)
+      logger.info(tr('log.mintedCookie', { authority: minted.authority }))
       return { url: uiUrl(port), mode: 'minted-cookie' }
     } catch (error) {
-      logger.error(`写入 cookie 失败：${error.message}`)
+      logger.error(tr('log.cookieWriteFailed', { message: error.message }))
     }
   }
-  logger.info('无法获取启动令牌也无法签发 cookie，尝试匿名访问')
+  logger.info(tr('log.anonymous'))
   return { url: uiUrl(port), mode: 'anonymous' }
 }
 
@@ -367,10 +418,10 @@ async function loadDsh() {
   const project = config.activeProject()
   if (!project || !dshView) return
   const { url, mode } = await authenticate(project.port, server.token)
-  logger.info(`加载界面（${mode}）：${url}`)
+  logger.info(tr('log.loadUi', { mode, url }))
   dshView.setVisible(true)
   await dshView.webContents.loadURL(url).catch((error) => {
-    logger.error(`界面加载失败：${error.message}`)
+    logger.error(tr('log.uiLoadFailed', { message: error.message }))
   })
 }
 
@@ -405,19 +456,14 @@ function updateTray() {
   if (!tray || tray.isDestroyed()) return
   const project = config.activeProject()
   const snapshot = server ? server.snapshot() : { state: 'stopped' }
-  const label = {
-    stopped: '已停止',
-    starting: '启动中…',
-    running: '运行中',
-    external: '运行中（接管）',
-    stopping: '停止中…',
-  }[snapshot.state] || snapshot.state
+  const label = tr(`state.${snapshot.state}`)
 
-  let tooltip = `DSH 客户端 · ${label}`
-  if (project) tooltip += `\n端口 ${project.port}`
+  let tooltip = `${tr('app.title')} · ${label}`
+  if (project) tooltip += `\n${tr('service.port', { port: project.port })}`
   if (balance) {
-    tooltip += `\n余额 ${balance.currency || ''} ${fmtMoney(balance.totalBalance)}`
-    if (balance.todayUsage != null) tooltip += `\n今日已用 ${fmtMoney(balance.todayUsage)}`
+    const amount = `${balance.currency || ''} ${fmtMoney(balance.totalBalance)}`.trim()
+    tooltip += `\n${tr('tray.balance', { value: amount })}`
+    if (balance.todayUsage != null) tooltip += `\n${tr('tray.todayUsage', { value: fmtMoney(balance.todayUsage) })}`
   }
   tray.setToolTip(tooltip)
   tray.setContextMenu(buildTrayMenu())
@@ -429,29 +475,23 @@ function buildTrayMenu() {
   const active = snapshot.state === 'running' || snapshot.state === 'external'
 
   return Menu.buildFromTemplate([
-    {
-      label: `状态：${{
-        stopped: '已停止', starting: '启动中…', running: '运行中',
-        external: '运行中（接管外部实例）', stopping: '停止中…',
-      }[snapshot.state] || snapshot.state}`,
-      enabled: false,
-    },
+    { label: tr('tray.status', { state: tr(`state.${snapshot.state}`) }), enabled: false },
     ...(balance
       ? [
-          { label: `余额：${balance.currency || ''} ${fmtMoney(balance.totalBalance)}`, enabled: false },
-          { label: `今日已用：${fmtMoney(balance.todayUsage)}`, enabled: false },
+          { label: tr('tray.balance', { value: `${balance.currency || ''} ${fmtMoney(balance.totalBalance)}`.trim() }), enabled: false },
+          { label: tr('tray.todayUsage', { value: fmtMoney(balance.todayUsage) }), enabled: false },
         ]
       : []),
     { type: 'separator' },
-    { label: '显示窗口', click: () => openUi() },
-    { label: '显示 / 隐藏悬浮栏', click: () => sendOverlay('toggle') },
+    { label: tr('tray.showWindow'), click: () => openUi() },
+    { label: tr('tray.toggleOverlay'), click: () => sendOverlay('toggle') },
     { type: 'separator' },
-    { label: '启动服务', enabled: !active && !busy, click: () => doStart() },
-    { label: '停止服务', enabled: active && !busy, click: () => doStop() },
-    { label: '重启服务', enabled: !busy, click: () => doRestart() },
+    { label: tr('bar.start'), enabled: !active && !busy, click: () => doStart() },
+    { label: tr('bar.stop'), enabled: active && !busy, click: () => doStop() },
+    { label: tr('bar.restart'), enabled: !busy, click: () => doRestart() },
     { type: 'separator' },
     {
-      label: '项目',
+      label: tr('tray.projects'),
       submenu: config.all().projects.map((project) => ({
         label: `${project.name}  ·  ${project.port}`,
         type: 'radio',
@@ -460,13 +500,13 @@ function buildTrayMenu() {
       })),
     },
     {
-      label: '开机自启',
+      label: tr('settings.openAtLogin'),
       type: 'checkbox',
       checked: app.getLoginItemSettings().openAtLogin,
       click: (item) => setOpenAtLogin(item.checked),
     },
     { type: 'separator' },
-    { label: '退出', click: () => { quitting = true; app.quit() } },
+    { label: tr('tray.quit'), click: () => { quitting = true; app.quit() } },
   ])
 }
 
@@ -496,7 +536,7 @@ async function doStart() {
   try {
     prepareEnvironment()
   } catch (error) {
-    logger.error(`环境准备失败：${error.message}`)
+    logger.error(tr('log.envPrepFailed', { message: error.message }))
   }
   const result = await server.start(project)
   pushState()
@@ -504,7 +544,7 @@ async function doStart() {
     await loadDsh()
     startBalancePolling()
   } else {
-    dialog.showErrorBox('启动失败', result.error || '未知错误')
+    dialog.showErrorBox(tr('dialog.startFailed'), result.error || tr('dialog.unknownError'))
   }
   return result
 }
@@ -589,7 +629,7 @@ function runPluginCommand({ mode, name, spec }) {
   return new Promise((resolve) => {
     const runtime = resolveRuntime()
     if (!runtime.dshBin || !runtime.nodeBin) {
-      const error = '找不到可用的 DSH 运行时，无法执行插件命令'
+      const error = tr('log.runtimeMissing')
       logger.error(error)
       return resolve({ ok: false, error })
     }
@@ -602,7 +642,7 @@ function runPluginCommand({ mode, name, spec }) {
     if (!args) return resolve({ ok: false, error: `未知操作：${mode}` })
 
     const fullArgs = [...runtime.nodeArgs, runtime.dshBin, ...args]
-    logger.info(`执行：${runtime.nodeBin} ${fullArgs.join(' ')}`)
+    logger.info(tr('log.exec', { command: `${runtime.nodeBin} ${fullArgs.join(' ')}` }))
     const child = spawn(runtime.nodeBin, fullArgs, {
       cwd: config.activeProject()?.cwd || undefined,
       windowsHide: true,
@@ -619,16 +659,13 @@ function runPluginCommand({ mode, name, spec }) {
     child.stdout.on('data', (chunk) => logger.write('plugin', String(chunk)))
     child.stderr.on('data', (chunk) => logger.write('plugin', String(chunk)))
     child.on('error', (error) => {
-      logger.error(`插件命令启动失败：${error.message}`)
+      logger.error(tr('log.pluginSpawnFailed', { message: error.message }))
       resolve({ ok: false, error: error.message })
     })
     child.on('exit', (code) => {
-      logger.info(`插件命令结束（code=${code}）`)
+      logger.info(tr('log.pluginFinished', { code }))
       if (code !== 0 && !hasPnpm()) {
-        logger.error(
-          '未检测到 pnpm：安装/更新/卸载插件需要它（可执行 npm i -g pnpm 安装）。' +
-          '随安装包内置的挂件不受影响，仍可正常使用。',
-        )
+        logger.error(tr('log.pnpmMissing'))
       }
       pushState()
       resolve({ ok: code === 0, code })
@@ -640,6 +677,10 @@ function runPluginCommand({ mode, name, spec }) {
 
 function registerIpc() {
   ipcMain.handle('state:get', () => fullState())
+  ipcMain.handle('i18n:messages', () => ({
+    language: effectiveLanguage(),
+    messages: messagesFor(effectiveLanguage()),
+  }))
   ipcMain.handle('app:quit', () => { quitting = true; app.quit(); return { ok: true } })
   ipcMain.handle('app:hideWindow', () => { if (mainWindow) mainWindow.hide(); return { ok: true } })
 
@@ -658,11 +699,27 @@ function registerIpc() {
     config.patch(patch || {})
     if (patch && 'openAtLogin' in patch) setOpenAtLogin(Boolean(patch.openAtLogin))
     if (patch && 'theme' in patch) syncThemeToDsh(config.all().theme)
+    // 语言：一次切换同时作用于本客户端（渲染层重新取词）与 DSH 自身
+    if (patch && 'language' in patch) syncLanguageToDsh()
     pushState()
     return config.all()
   })
 
   ipcMain.handle('project:setActive', (_event, id) => switchProject(config.setActive(id)))
+
+  /**
+   * 切换界面形态。手动切换隐含「我要自己控制」，因此会同时关掉自动切换，
+   * 否则下一次服务状态变化就会把它顶回去。设置里的开关可以再打开自动模式。
+   */
+  ipcMain.handle('surface:set', (_event, value) => {
+    const state = server ? server.snapshot().state : 'stopped'
+    const next = value === 'toggle'
+      ? (currentSurface(state) === 'console' ? 'bar' : 'console')
+      : (value === 'console' ? 'console' : 'bar')
+    config.patch({ surface: next, autoSurface: false })
+    pushState()
+    return next
+  })
 
   ipcMain.handle('project:upsert', async (_event, project) => {
     const saved = config.upsertProject(project || {})
@@ -680,7 +737,7 @@ function registerIpc() {
   ipcMain.handle('dialog:pickDirectory', async () => {
     const result = await dialog.showOpenDialog(mainWindow, {
       properties: ['openDirectory', 'createDirectory'],
-      title: '选择工作目录',
+      title: tr('dialog.pickDirectory'),
     })
     return result.canceled ? null : result.filePaths[0]
   })
@@ -705,7 +762,7 @@ function registerIpc() {
    *  面板以外的区域因此仍能正常点击到下面的 DSH 界面。 */
   ipcMain.handle('overlay:resize', (_event, size) => {
     // 控制台形态由主进程铺满窗口，忽略上报尺寸，否则会被缩回悬浮条大小
-    if (surface === 'console') return { ok: true, ignored: true }
+    if (activeSurface() === 'console') return { ok: true, ignored: true }
     const width = Math.max(40, Math.round(Number(size?.width) || DEFAULT_OVERLAY_SIZE.width))
     const height = Math.max(40, Math.round(Number(size?.height) || DEFAULT_OVERLAY_SIZE.height))
     if (width === overlaySize.width && height === overlaySize.height) return { ok: true }
@@ -722,8 +779,10 @@ app.on('second-instance', () => openUi())
 app.whenReady().then(async () => {
   config = new Config(app.getPath('userData'))
   logger = new Logger(path.join(app.getPath('logs'), 'dsh-client.log'))
-  server = new ServerManager({ logger })
+  server = new ServerManager({ logger, tr })
   syncThemeToDsh(config.all().theme)
+  // 让 DSH 的界面语言与客户端保持一致（写 settings.yaml，DSH 监听该文件即时生效）
+  syncLanguageToDsh()
 
   server.on('state', () => pushState())
   logger.on('line', (line) => {
@@ -746,7 +805,7 @@ app.whenReady().then(async () => {
   try {
     prepareEnvironment()
   } catch (error) {
-    logger.error(`环境准备失败：${error.message}`)
+    logger.error(tr('log.envPrepFailed', { message: error.message }))
   }
 
   const project = config.activeProject()
@@ -754,7 +813,7 @@ app.whenReady().then(async () => {
     if (config.all().adoptExternal) {
       await server.refresh(project)
       if (server.snapshot().state === 'external') {
-        logger.info(`检测到端口 ${project.port} 上已有 DSH 实例，已接管`)
+        logger.info(tr('log.adopted', { port: project.port }))
         startBalancePolling()
       }
     }
@@ -763,7 +822,7 @@ app.whenReady().then(async () => {
       await loadDsh()
     } else if (config.all().autoStartOnLaunch) {
       // 双击即用：客户端起来就把服务拉起来，而不是停在占位页
-      logger.info('服务未运行，按设置自动启动')
+      logger.info(tr('log.autoStart'))
       await doStart()
     } else {
       showIdle()
@@ -786,11 +845,11 @@ app.on('before-quit', async (event) => {
     event.preventDefault()
     quitAfterStop = true
     await server.dispose({ kill: true })
-    logger.info('已停止由本客户端启动的服务进程')
+    logger.info(tr('log.stoppedByClient'))
     app.quit()
   }
 })
 
 process.on('uncaughtException', (error) => {
-  if (logger) logger.error(`未捕获异常：${error?.stack || error?.message || error}`)
+  if (logger) logger.error(tr('log.uncaught', { message: error?.stack || error?.message || error }))
 })

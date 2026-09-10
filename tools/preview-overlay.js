@@ -7,6 +7,10 @@
 const fs = require('node:fs')
 const path = require('node:path')
 const { app, BrowserWindow, ipcMain } = require('electron')
+const { messagesFor } = require('../lib/i18n')
+
+let previewLanguage = 'zh'
+let win = null
 
 app.commandLine.appendSwitch('disable-background-timer-throttling')
 app.commandLine.appendSwitch('disable-backgrounding-occluded-windows')
@@ -72,19 +76,28 @@ const MOCK_LOGS = [
 app.whenReady().then(async () => {
   fs.mkdirSync(OUT_DIR, { recursive: true })
 
-  ipcMain.handle('state:get', () => MOCK_STATE)
+  ipcMain.handle('state:get', () => ({ ...MOCK_STATE, language: previewLanguage }))
   ipcMain.handle('logs:tail', () => MOCK_LOGS)
   ipcMain.handle('overlay:resize', () => ({ ok: true }))
+  ipcMain.handle('i18n:messages', () => ({ language: previewLanguage, messages: messagesFor(previewLanguage) }))
   for (const channel of [
     'app:quit', 'app:hideWindow', 'server:start', 'server:stop', 'server:restart',
-    'server:openBrowser', 'config:patch', 'project:setActive', 'project:upsert',
+    'server:openBrowser', 'project:setActive', 'project:upsert',
     'project:remove', 'dialog:pickDirectory', 'logs:clear', 'logs:openFile',
     'plugins:list', 'plugin:run', 'balance:refresh',
   ]) {
     ipcMain.handle(channel, () => ({ ok: true }))
   }
+  // 模拟真实主进程：改配置后回推一次 state，渲染层据此重绘（含语言切换）
+  ipcMain.handle('config:patch', (_event, patch) => {
+    const next = patch || {}
+    if (next.language) previewLanguage = next.language
+    if (next.theme) MOCK_STATE.config.theme = next.theme
+    if (win && !win.isDestroyed()) win.webContents.send('state', { ...MOCK_STATE, language: previewLanguage })
+    return { ok: true }
+  })
 
-  const win = new BrowserWindow({
+  const winRef = new BrowserWindow({
     width: 460,
     height: 880,
     show: false,
@@ -95,6 +108,7 @@ app.whenReady().then(async () => {
       nodeIntegration: false,
     },
   })
+  win = winRef
 
   await win.loadFile(path.join(__dirname, '..', 'renderer', 'control.html'))
   await new Promise((resolve) => setTimeout(resolve, 900))
@@ -107,14 +121,44 @@ app.whenReady().then(async () => {
   `)
   await new Promise((resolve) => setTimeout(resolve, 900))
 
-  const image = await win.webContents.capturePage()
-  const png = image.toPNG()
-  if (png.length === 0) {
-    console.error('截图为空')
-    app.exit(1)
-    return
+  // 中英各截一张，便于对照
+  for (const language of ['zh', 'en']) {
+    previewLanguage = language
+    await win.webContents.executeJavaScript(`
+      (async () => {
+        await window.dshClient.patchConfig({ language: ${JSON.stringify(language)} })
+      })()
+    `)
+    await new Promise((resolve) => setTimeout(resolve, 900))
+
+    // 打印真实 DOM 状态：隐藏窗口的截图可能是上一帧，不能只看图
+    const diag = await win.webContents.executeJavaScript(`({
+      lang: window.__dshI18n.language,
+      htmlLang: document.documentElement.lang,
+      service: document.querySelector('.acc[data-key="service"] .acc-head span').textContent.trim(),
+      projects: document.querySelector('.acc[data-key="projects"] .acc-head span').textContent.trim(),
+      editBtn: (document.querySelector('#projects [data-act="edit"]') || {}).textContent,
+      openAccordions: document.querySelectorAll('.acc.open').length,
+      panelExpanded: !document.getElementById('panel').classList.contains('hidden'),
+    })`)
+    console.log(`  [${language}] ${JSON.stringify(diag)}`)
+
+    // 隐藏窗口会被节流，强制一次整屏重绘，并丢掉可能过时的那一帧
+    win.webContents.invalidate()
+    await new Promise((resolve) => setTimeout(resolve, 400))
+    await win.webContents.capturePage()
+    await new Promise((resolve) => setTimeout(resolve, 250))
+
+    const image = await win.webContents.capturePage()
+    const png = image.toPNG()
+    if (png.length === 0) {
+      console.error(`截图为空（${language}）`)
+      app.exit(1)
+      return
+    }
+    const file = path.join(OUT_DIR, `overlay-${language}.png`)
+    fs.writeFileSync(file, png)
+    console.log(`已保存 ${file}（${png.length} 字节）`)
   }
-  fs.writeFileSync(OUT, png)
-  console.log(`已保存 ${OUT}（${png.length} 字节）`)
   app.exit(0)
 })

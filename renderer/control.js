@@ -1,24 +1,23 @@
 'use strict'
 
-// 悬浮选项栏渲染进程逻辑。
+// 悬浮选项栏 / 全窗口控制台 的渲染逻辑。
+//
+// 整体包在 IIFE 里：传统 <script> 的顶层声明会落进全局作用域，
+// 与 i18n.js 等脚本的同名声明冲突会直接变成语法错误。
+
+;(function () {
 
 const api = window.dshClient
+const { t, applyStatic, setMessages } = window.__dshI18n
 const $ = (id) => document.getElementById(id)
 
 const WHALE_SPEC = 'github:MeteorNOX/DeepSeek-Balance-Whale-Widget'
-
-const stateLabels = {
-  stopped: '已停止',
-  starting: '启动中…',
-  running: '运行中',
-  external: '运行中 · 接管',
-  stopping: '停止中…',
-}
 
 let current = null
 let logBuffer = []
 let logFilter = 'all'
 let lastSize = { width: 0, height: 0 }
+let lastLanguage = ''
 const MAX_LOG_LINES = 800
 
 function escapeHtml(value) {
@@ -34,6 +33,15 @@ function fmtMoney(value) {
   if (!Number.isFinite(number)) return '--'
   if (number === 0) return '0.00'
   return Math.abs(number) >= 1 ? number.toFixed(2) : number.toFixed(4)
+}
+
+function formatUptime(startedAt) {
+  const seconds = Math.max(0, Math.floor((Date.now() - startedAt) / 1000))
+  const totalMinutes = Math.floor(seconds / 60)
+  if (totalMinutes >= 60) {
+    return t('service.uptimeHours', { hours: Math.floor(totalMinutes / 60), minutes: totalMinutes % 60 })
+  }
+  return t('service.uptime', { minutes: totalMinutes, seconds: String(seconds % 60).padStart(2, '0') })
 }
 
 // ---------------------------------------------------------------- 尺寸上报
@@ -57,10 +65,34 @@ function afterLayoutChange() {
 
 // ---------------------------------------------------------------- 折叠面板
 
+const COLLAPSE_MS = 180
+
+/**
+ * 展开/收起主面板。
+ * 收起时先播放淡出动画，动画结束再 display:none——
+ * 否则视图会立刻缩到悬浮条大小，看不出过渡。
+ */
 function setExpanded(expanded) {
-  $('panel').classList.toggle('hidden', !expanded)
-  $('btnToggle').textContent = expanded ? '×' : '⋯'
-  $('btnToggle').title = expanded ? '收起选项栏' : '展开选项栏'
+  const panel = $('panel')
+  clearTimeout(setExpanded._timer)
+
+  if (expanded) {
+    panel.classList.remove('hidden')
+    // 强制一次重排，保证从「隐藏」到「可见」之间真的产生过渡
+    void panel.offsetHeight
+    panel.classList.remove('panel-leaving')
+    $('btnToggle').textContent = '×'
+    $('btnToggle').title = t('bar.collapse')
+  } else {
+    panel.classList.add('panel-leaving')
+    setExpanded._timer = setTimeout(() => {
+      panel.classList.add('hidden')
+      panel.classList.remove('panel-leaving')
+      afterLayoutChange()
+    }, COLLAPSE_MS)
+    $('btnToggle').textContent = '⋯'
+    $('btnToggle').title = t('bar.expand')
+  }
   afterLayoutChange()
 }
 
@@ -84,32 +116,66 @@ let lastSurface = ''
 /** 服务未运行 → 全面控制台（铺满窗口、面板全开）；启动中/运行中 → 右上角悬浮条。 */
 function applySurface() {
   const next = current && current.surface === 'console' ? 'console' : 'bar'
+  const changed = next !== lastSurface
   document.body.dataset.surface = next
   if (next === 'console') {
-    $('panel').classList.remove('hidden')
+    const panel = $('panel')
+    clearTimeout(setExpanded._timer)
+    panel.classList.remove('hidden', 'panel-leaving')
     for (const acc of document.querySelectorAll('.acc')) acc.classList.add('open')
   } else if (lastSurface === 'console') {
     // 从控制台回到悬浮条：收起面板，避免一出现就铺满屏幕
-    setExpanded(false)
+    clearTimeout(setExpanded._timer)
+    $('panel').classList.add('hidden')
+    $('panel').classList.remove('panel-leaving')
+  }
+  if (changed && lastSurface !== '') {
+    document.body.classList.add('surface-anim')
+    setTimeout(() => document.body.classList.remove('surface-anim'), 260)
   }
   lastSurface = next
 }
 
 /** 客户端界面主题：只改 body 的 data-theme，颜色由 theme-tokens.css 决定。 */
-function applyTheme() {
-  document.body.dataset.theme = (current && current.config && current.config.theme) || 'dsh-white-blue'
+function applyTheme(animate = false) {
+  const next = (current && current.config && current.config.theme) || 'dsh-white-blue'
+  const changed = document.body.dataset.theme !== next
+  if (changed && animate) {
+    // 只在切换的那一刻打开颜色过渡，避免平时悬停/重绘也被拖慢
+    document.body.classList.add('theme-anim')
+    clearTimeout(applyTheme._timer)
+    applyTheme._timer = setTimeout(() => document.body.classList.remove('theme-anim'), 340)
+  }
+  document.body.dataset.theme = next
 }
 
 function renderThemes() {
   const select = $('optTheme')
   if (!select) return
   const list = Array.isArray(current && current.themes) ? current.themes : []
-  if (select.options.length !== list.length) {
+  const signature = list.map((theme) => theme.id).join(',')
+  if (select.dataset.signature !== signature) {
     select.innerHTML = list
-      .map((theme) => `<option value="${escapeHtml(theme.id)}">${escapeHtml(theme.label)}</option>`)
+      // 主题名走词典（词典缺失时回落到主题自带的 label）
+      .map((theme) => `<option value="${escapeHtml(theme.id)}">${escapeHtml(t(`theme.${theme.id}`) === `theme.${theme.id}` ? theme.label : t(`theme.${theme.id}`))}</option>`)
       .join('')
+    select.dataset.signature = signature
   }
   select.value = (current && current.config && current.config.theme) || 'dsh-white-blue'
+}
+
+function renderLanguages() {
+  const select = $('optLanguage')
+  if (!select) return
+  const list = Array.isArray(current && current.languages) ? current.languages : []
+  const signature = list.map((language) => language.id).join(',')
+  if (select.dataset.signature !== signature) {
+    select.innerHTML = list
+      .map((language) => `<option value="${escapeHtml(language.id)}">${escapeHtml(language.label)}</option>`)
+      .join('')
+    select.dataset.signature = signature
+  }
+  select.value = (current && current.language) || 'zh'
 }
 
 // ---------------------------------------------------------------- 渲染
@@ -117,7 +183,7 @@ function renderThemes() {
 function renderBar() {
   const snapshot = current.server
   $('dot').className = `dot ${snapshot.state}`
-  $('barState').textContent = stateLabels[snapshot.state] || snapshot.state
+  $('barState').textContent = t(`state.${snapshot.state}`)
   $('barBalance').textContent = current.balance
     ? `${current.balance.currency || ''} ${fmtMoney(current.balance.totalBalance)}`.trim()
     : '--'
@@ -132,12 +198,9 @@ function renderBar() {
 function renderServer() {
   const snapshot = current.server
   const bits = []
-  if (snapshot.port) bits.push(`端口 ${snapshot.port}`)
+  if (snapshot.port) bits.push(t('service.port', { port: snapshot.port }))
   if (snapshot.pid) bits.push(`PID ${snapshot.pid}`)
-  if (snapshot.startedAt) {
-    const seconds = Math.max(0, Math.floor((Date.now() - snapshot.startedAt) / 1000))
-    bits.push(`已运行 ${Math.floor(seconds / 60)}分${String(seconds % 60).padStart(2, '0')}秒`)
-  }
+  if (snapshot.startedAt) bits.push(formatUptime(snapshot.startedAt))
   if (snapshot.cwd) bits.push(snapshot.cwd)
   $('serverMeta').textContent = bits.join('  ·  ') || '—'
 
@@ -150,13 +213,13 @@ function renderServer() {
 
   const hint = $('serverHint')
   if (snapshot.lastError) {
-    hint.textContent = `最近错误：${snapshot.lastError}`
+    hint.textContent = t('service.hint.lastError', { message: snapshot.lastError })
     hint.className = 'hint error'
   } else if (snapshot.state === 'external') {
-    hint.textContent = '端口上已有 DSH 实例，客户端已接管（停止会结束该进程）。'
+    hint.textContent = t('service.hint.external')
     hint.className = 'hint'
   } else if (snapshot.state === 'running') {
-    hint.textContent = '服务由本客户端启动，界面就在本窗口内。'
+    hint.textContent = t('service.hint.running')
     hint.className = 'hint'
   } else {
     hint.textContent = ''
@@ -173,15 +236,15 @@ function renderProjects() {
     const row = document.createElement('div')
     row.className = `project${project.id === activeProjectId ? ' active' : ''}`
     row.innerHTML = `
-      <div class="radio" title="设为当前项目"></div>
+      <div class="radio" title="${escapeHtml(t('projects.setActive'))}"></div>
       <div class="info">
         <div class="name">${escapeHtml(project.name)}</div>
         <div class="path">${escapeHtml(project.cwd)}</div>
       </div>
       <div class="port">:${project.port}</div>
       <div class="row-actions">
-        <button class="btn tiny" data-act="edit">改</button>
-        <button class="btn tiny danger" data-act="remove" ${projects.length <= 1 ? 'disabled' : ''}>删</button>
+        <button class="btn tiny" data-act="edit">${escapeHtml(t('projects.edit'))}</button>
+        <button class="btn tiny danger" data-act="remove" ${projects.length <= 1 ? 'disabled' : ''}>${escapeHtml(t('projects.delete'))}</button>
       </div>`
     row.querySelector('.radio').addEventListener('click', async () => {
       if (project.id === current.config.activeProjectId) return
@@ -196,15 +259,15 @@ function renderProjects() {
 function editProject(row, project) {
   row.innerHTML = `
     <div class="editor">
-      <input data-field="name" placeholder="名称" value="${escapeHtml(project.name)}" />
-      <input data-field="port" type="number" min="1" max="65535" placeholder="端口" value="${project.port}" />
+      <input data-field="name" placeholder="${escapeHtml(t('projects.field.name'))}" value="${escapeHtml(project.name)}" />
+      <input data-field="port" type="number" min="1" max="65535" placeholder="${escapeHtml(t('projects.field.port'))}" value="${project.port}" />
       <div class="full">
-        <input data-field="cwd" placeholder="工作目录" value="${escapeHtml(project.cwd)}" />
-        <button class="btn tiny" data-act="browse">浏览</button>
+        <input data-field="cwd" placeholder="${escapeHtml(t('projects.field.cwd'))}" value="${escapeHtml(project.cwd)}" />
+        <button class="btn tiny" data-act="browse">${escapeHtml(t('projects.browse'))}</button>
       </div>
       <div class="full">
-        <button class="btn tiny primary" data-act="save">保存</button>
-        <button class="btn tiny" data-act="cancel">取消</button>
+        <button class="btn tiny primary" data-act="save">${escapeHtml(t('projects.save'))}</button>
+        <button class="btn tiny" data-act="cancel">${escapeHtml(t('projects.cancel'))}</button>
       </div>
     </div>`
   const input = (field) => row.querySelector(`[data-field="${field}"]`)
@@ -221,7 +284,7 @@ function editProject(row, project) {
     if (!Number.isInteger(port) || port < 1 || port > 65535) { input('port').focus(); return }
     await api.upsertProject({
       id: project.id,
-      name: input('name').value.trim() || '未命名项目',
+      name: input('name').value.trim() || t('projects.untitled'),
       cwd: input('cwd').value.trim(),
       port,
     })
@@ -240,9 +303,9 @@ function renderPlugins() {
     row.innerHTML = `
       <div class="info">
         <div class="name">dsh-whale-widget</div>
-        <div class="sub">未安装 · 余额挂件</div>
+        <div class="sub">${escapeHtml(t('plugins.notInstalled'))}</div>
       </div>
-      <div class="row-actions"><button class="btn tiny primary" data-act="install">安装</button></div>`
+      <div class="row-actions"><button class="btn tiny primary" data-act="install">${escapeHtml(t('plugins.install'))}</button></div>`
     row.querySelector('[data-act="install"]').addEventListener('click', () => api.pluginRun({ mode: 'install', spec: WHALE_SPEC }))
     host.appendChild(row)
   }
@@ -250,15 +313,17 @@ function renderPlugins() {
   for (const plugin of list) {
     const row = document.createElement('div')
     row.className = 'plugin'
+    const versionText = plugin.version ? `v${escapeHtml(plugin.version)}` : escapeHtml(t('plugins.versionUnknown'))
+    const layerText = plugin.bundle ? ` · ${escapeHtml(t('plugins.uiLayer'))}` : ''
     row.innerHTML = `
       <div class="info">
         <div class="name">${escapeHtml(plugin.name)}</div>
-        <div class="sub">${plugin.version ? `v${escapeHtml(plugin.version)}` : '版本未解析'}${plugin.bundle ? ' · 界面层' : ''}</div>
+        <div class="sub">${versionText}${layerText}</div>
       </div>
       ${plugin.bundle ? '<span class="tag">bundle</span>' : ''}
       <div class="row-actions">
-        <button class="btn tiny" data-act="update">更新</button>
-        <button class="btn tiny danger" data-act="remove">卸载</button>
+        <button class="btn tiny" data-act="update">${escapeHtml(t('plugins.update'))}</button>
+        <button class="btn tiny danger" data-act="remove">${escapeHtml(t('plugins.uninstall'))}</button>
       </div>`
     row.querySelector('[data-act="update"]').addEventListener('click', () => api.pluginRun({ mode: 'update', name: plugin.name }))
     row.querySelector('[data-act="remove"]').addEventListener('click', () => api.pluginRun({ mode: 'remove', name: plugin.name }))
@@ -273,23 +338,25 @@ function renderSettings() {
   $('optOpenUiOnStart').checked = Boolean(current.config.openUiOnStart)
   $('optAdoptExternal').checked = Boolean(current.config.adoptExternal)
   $('optStopOnQuit').checked = Boolean(current.config.stopServerOnQuit)
+  $('optAutoSurface').checked = Boolean(current.config.autoSurface)
 
   const rows = [
     ['node', current.resolved.node, Boolean(current.resolved.node)],
     ['dsh', current.resolved.dsh, Boolean(current.resolved.dsh)],
-    ['挂件资源', current.resolved.whaleAssets, Boolean(current.resolved.whaleAssets)],
+    [t('env.whaleAssets'), current.resolved.whaleAssets, Boolean(current.resolved.whaleAssets)],
     ['DSH_HOME', current.resolved.dshHome, true],
-    ['服务地址', current.resolved.uiUrl, true],
+    [t('env.uiUrl'), current.resolved.uiUrl, true],
   ]
   $('env').innerHTML = rows
-    .map(([label, value, ok]) => `<dt>${escapeHtml(label)}</dt><dd class="${ok ? '' : 'bad'}">${escapeHtml(value || '未找到')}</dd>`)
+    .map(([label, value, ok]) => `<dt>${escapeHtml(label)}</dt><dd class="${ok ? '' : 'bad'}">${escapeHtml(value || t('common.notFound'))}</dd>`)
     .join('')
 }
 
-function renderAll() {
+function renderAll({ animateTheme = false } = {}) {
   if (!current) return
-  applyTheme()
+  applyTheme(animateTheme)
   renderThemes()
+  renderLanguages()
   applySurface()
   renderBar()
   renderServer()
@@ -323,6 +390,19 @@ function appendLog(line) {
   if (atBottom) host.scrollTop = host.scrollHeight
 }
 
+// ---------------------------------------------------------------- 语言
+
+/** 语言变化时重新取词典并整屏重绘（静态文案 + 动态文案）。 */
+async function refreshLanguage() {
+  const payload = await api.i18nMessages()
+  setMessages(payload.language, payload.messages)
+  lastLanguage = payload.language
+  applyStatic()
+  $('btnToggle').title = isExpanded() ? t('bar.collapse') : t('bar.expand')
+  renderAll()
+  renderLogs()
+}
+
 // ---------------------------------------------------------------- 事件
 
 function bind() {
@@ -336,12 +416,17 @@ function bind() {
   $('btnRestart').addEventListener('click', () => api.restart())
   $('btnBrowser').addEventListener('click', () => api.openInBrowser())
 
+  // 界面形态手动切换：悬浮条里是图标、控制台里是带文字的按钮，行为一致
+  $('btnSurfaceBar').addEventListener('click', () => api.setSurface('toggle'))
+  $('btnSurfaceConsole').addEventListener('click', () => api.setSurface('toggle'))
+  $('optAutoSurface').addEventListener('change', (e) => api.patchConfig({ autoSurface: e.target.checked }))
+
   $('btnAddProject').addEventListener('click', () => {
     const host = $('projects')
     const row = document.createElement('div')
     row.className = 'project'
     host.appendChild(row)
-    editProject(row, { id: '', name: '新项目', cwd: current.project?.cwd || '', port: 3081 })
+    editProject(row, { id: '', name: t('projects.newName'), cwd: current.project?.cwd || '', port: 3081 })
   })
 
   $('optOpenAtLogin').addEventListener('change', (e) => api.patchConfig({ openAtLogin: e.target.checked }))
@@ -351,10 +436,14 @@ function bind() {
   $('optStopOnQuit').addEventListener('change', (e) => api.patchConfig({ stopServerOnQuit: e.target.checked }))
 
   $('optTheme').addEventListener('change', (e) => {
-    // 主进程会把主题同时写进客户端配置与 $DSH_HOME/.dsh-theme.json，
-    // DSH 页面的注入脚本轮询到之后跟着切换
-    document.body.dataset.theme = e.target.value
+    // 先本地切（带动画），再由主进程同步给 DSH 侧的注入脚本
+    if (current) current.config = { ...current.config, theme: e.target.value }
+    applyTheme(true)
     api.patchConfig({ theme: e.target.value })
+  })
+
+  $('optLanguage').addEventListener('change', (e) => {
+    api.patchConfig({ language: e.target.value })
   })
 
   $('btnPluginInstallSpec').addEventListener('click', async () => {
@@ -398,6 +487,11 @@ async function main() {
   bindAccordion()
   $('panel').querySelector('.acc[data-key="service"]').classList.add('open')
 
+  const payload = await api.i18nMessages()
+  setMessages(payload.language, payload.messages)
+  lastLanguage = payload.language
+  applyStatic()
+
   const lines = await api.logsTail()
   logBuffer = Array.isArray(lines) ? lines.slice(-MAX_LOG_LINES) : []
   renderLogs()
@@ -409,8 +503,15 @@ async function main() {
     renderBar()
   })
   api.onState((next) => {
+    const languageChanged = Boolean(next.language) && next.language !== lastLanguage
+    const themeChanged = Boolean(next.config) && current && next.config.theme !== current.config.theme
     current = next
-    renderAll()
+    if (languageChanged) {
+      // 语言变了：先换词典再整屏重绘（refreshLanguage 内部会 renderAll）
+      refreshLanguage()
+      return
+    }
+    renderAll({ animateTheme: themeChanged })
   })
   api.onOverlayCommand((command) => {
     if (command === 'toggle') setExpanded(!isExpanded())
@@ -429,7 +530,7 @@ async function main() {
   setInterval(() => { if (current) renderServer() }, 1000)
 }
 
-// 验证钩子：tools/verify.js 用它直接切形态/主题，不必真的去停服务
+// 验证钩子：tools/verify.js 用它直接切形态/主题/语言，不必真的去停服务
 window.__dshControl = {
   setSurface(surface) {
     current = { ...(current || {}), surface }
@@ -438,11 +539,18 @@ window.__dshControl = {
   },
   setTheme(id) {
     current = { ...(current || {}), config: { ...((current && current.config) || {}), theme: id } }
-    applyTheme()
+    applyTheme(true)
     return document.body.dataset.theme
+  },
+  async setLanguage(id) {
+    await api.patchConfig({ language: id })
+    return lastLanguage
   },
   get surface() { return document.body.dataset.surface },
   get theme() { return document.body.dataset.theme },
+  get language() { return lastLanguage },
 }
 
 main()
+
+})()

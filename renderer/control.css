@@ -96,8 +96,14 @@ body {
   display: flex;
   flex-direction: column;
   gap: 6px;
+  opacity: 1;
+  transform: none;
+  transition: opacity .18s ease, transform .18s ease;
 }
 .panel.hidden { display: none; }
+/* 收起动画期间保留布局，淡出结束再 display:none——
+   否则视图会立刻缩到悬浮条大小，看不出过渡 */
+.panel.panel-leaving { opacity: 0; transform: translateY(-6px) scale(.985); pointer-events: none; }
 .panel::-webkit-scrollbar { width: 8px; }
 .panel::-webkit-scrollbar-thumb { background: var(--c-scroll); border-radius: 5px; }
 
@@ -142,8 +148,19 @@ body {
   border-radius: 999px;
 }
 
-.acc-body { display: none; padding: 9px 3px 3px; }
-.acc.open .acc-body { display: block; }
+/* 用 max-height 而不是 display:none，折叠栏才有展开/收起过渡 */
+.acc-body {
+  max-height: 0;
+  opacity: 0;
+  overflow: hidden;
+  padding: 0 3px;
+  transition: max-height .26s cubic-bezier(.4, 0, .2, 1), opacity .18s ease, padding .26s ease;
+}
+.acc.open .acc-body {
+  max-height: 1400px;
+  opacity: 1;
+  padding: 9px 3px 3px;
+}
 
 /* ---------------------------------------------------------------- 通用 */
 
@@ -171,6 +188,16 @@ body {
 .btn.danger { background: var(--c-danger-btn-bg); border-color: var(--c-danger-btn-border); color: var(--c-danger-btn-text); }
 .btn.ghost { background: transparent; }
 .btn.tiny { padding: 4px 9px; font-size: 11px; }
+
+/* 按键反馈：悬停/按下都有短过渡，按下时轻微缩小 */
+.btn, .icon-btn, .chip, .acc-head, .field select {
+  transition: background-color .16s ease, border-color .16s ease, color .16s ease,
+              transform .1s ease, box-shadow .16s ease;
+}
+.btn:active:not(:disabled),
+.icon-btn:active:not(:disabled),
+.chip:active { transform: scale(.955); }
+.acc-head:active { transform: scale(.99); }
 
 input[type="text"], input[type="number"], input:not([type]) {
   font: inherit;
@@ -347,6 +374,11 @@ body[data-surface="console"] .bar-balance { font-size: 13px; }
 /* 控制台里不需要「展开/收起」按钮：内容本来就是全展开的 */
 body[data-surface="console"] #btnToggle { display: none; }
 
+/* 形态切换按钮：悬浮条里是图标，控制台里换成带文字的按钮 */
+#btnSurfaceConsole { display: none; }
+body[data-surface="console"] #btnSurfaceConsole { display: inline-flex; align-items: center; }
+body[data-surface="console"] #btnSurfaceBar { display: none; }
+
 body[data-surface="console"] .panel {
   width: auto;
   max-height: none;
@@ -369,4 +401,31 @@ body[data-surface="console"] .logs { height: 280px; }
 body[data-surface="console"] .acc[data-key="logs"] { grid-column: span 2; }
 @media (max-width: 900px) {
   body[data-surface="console"] .acc[data-key="logs"] { grid-column: span 1; }
+}
+
+/* ================================================================ 动效 */
+
+/* 形态切换（悬浮条 ↔ 全面控制台）时整体淡入下滑 */
+@keyframes surface-in {
+  from { opacity: 0; transform: translateY(-8px); }
+  to   { opacity: 1; transform: none; }
+}
+body.surface-anim .bar,
+body.surface-anim .panel { animation: surface-in .24s cubic-bezier(.2, .8, .3, 1); }
+
+/* 主题渐变：只在切换的那一刻给颜色加过渡，平时不拖慢交互。
+   颜色令牌定义在 body[data-theme] 上，子元素继承，所以整屏统一渐变。 */
+body.theme-anim,
+body.theme-anim * {
+  transition: background-color .3s ease, color .3s ease, border-color .3s ease,
+              box-shadow .3s ease, fill .3s ease !important;
+}
+
+/* 尊重系统的「减少动态效果」设置 */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: .001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: .001ms !important;
+  }
 }

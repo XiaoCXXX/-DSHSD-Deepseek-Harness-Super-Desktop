@@ -4,7 +4,7 @@
   <meta charset="utf-8" />
   <meta http-equiv="Content-Security-Policy"
         content="default-src 'self'; style-src 'self' 'unsafe-inline'; script-src 'self'; img-src 'self' data:" />
-  <title>DSH 客户端控制台</title>
+  <title data-i18n="app.title">DSH 客户端</title>
   <link rel="stylesheet" href="theme-tokens.css" />
   <link rel="stylesheet" href="control.css" />
 </head>
@@ -12,16 +12,18 @@
   <div id="root">
     <!-- 悬浮条：收起状态就是这一条 -->
     <div class="bar" id="bar">
-      <span class="console-title" id="consoleTitle">DSH 客户端控制台</span>
-      <span class="console-sub" id="consoleSub">服务未运行 · 全部控制项已展开</span>
+      <span class="console-title" id="consoleTitle" data-i18n="app.consoleTitle">DSH 客户端控制台</span>
+      <span class="console-sub" id="consoleSub" data-i18n="app.consoleSub">服务未运行 · 全部控制项已展开</span>
       <span class="dot" id="dot"></span>
-      <span class="bar-state" id="barState">读取中</span>
+      <span class="bar-state" id="barState" data-i18n="common.loading">读取中</span>
       <span class="bar-balance" id="barBalance">--</span>
       <span class="spacer"></span>
-      <button class="icon-btn" id="btnQuickStart" title="启动服务">▶</button>
-      <button class="icon-btn" id="btnQuickStop" title="停止服务">■</button>
-      <button class="icon-btn" id="btnQuickRestart" title="重启服务">⟳</button>
-      <button class="icon-btn accent" id="btnToggle" title="展开 / 收起选项栏">⋯</button>
+      <button class="icon-btn" id="btnSurfaceBar" data-i18n-title="surface.toConsole" title="切换到客户端界面">▣</button>
+      <button class="btn tiny ghost" id="btnSurfaceConsole" data-i18n="surface.toDsh">返回 DSH 界面</button>
+      <button class="icon-btn" id="btnQuickStart" data-i18n-title="bar.start" title="启动服务">▶</button>
+      <button class="icon-btn" id="btnQuickStop" data-i18n-title="bar.stop" title="停止服务">■</button>
+      <button class="icon-btn" id="btnQuickRestart" data-i18n-title="bar.restart" title="重启服务">⟳</button>
+      <button class="icon-btn accent" id="btnToggle" data-i18n-title="bar.expand" title="展开选项栏">⋯</button>
     </div>
 
     <!-- 展开后的选项栏 -->
@@ -29,17 +31,17 @@
 
       <section class="acc" data-key="service">
         <button class="acc-head" data-acc="service">
-          <span>服务</span><span class="chev"></span>
+          <span data-i18n="section.service">服务</span><span class="chev"></span>
         </button>
         <div class="acc-body">
           <p class="meta" id="serverMeta">—</p>
           <div class="row">
-            <button class="btn primary" id="btnStart">▶ 启动</button>
-            <button class="btn" id="btnStop">■ 停止</button>
-            <button class="btn" id="btnRestart">⟳ 重启</button>
+            <button class="btn primary" id="btnStart">▶ <span data-i18n="service.start">启动</span></button>
+            <button class="btn" id="btnStop">■ <span data-i18n="service.stop">停止</span></button>
+            <button class="btn" id="btnRestart">⟳ <span data-i18n="service.restart">重启</span></button>
           </div>
           <div class="row">
-            <button class="btn ghost" id="btnBrowser">在浏览器打开</button>
+            <button class="btn ghost" id="btnBrowser" data-i18n="service.openInBrowser">在浏览器打开</button>
           </div>
           <p class="hint" id="serverHint"></p>
         </div>
@@ -47,43 +49,43 @@
 
       <section class="acc" data-key="projects">
         <button class="acc-head" data-acc="projects">
-          <span>项目</span><span class="chev"></span>
+          <span data-i18n="section.projects">项目</span><span class="chev"></span>
         </button>
         <div class="acc-body">
           <div id="projects"></div>
-          <button class="btn tiny" id="btnAddProject">＋ 新建项目</button>
+          <button class="btn tiny" id="btnAddProject">＋ <span data-i18n="projects.add">新建项目</span></button>
         </div>
       </section>
 
       <section class="acc" data-key="plugins">
         <button class="acc-head" data-acc="plugins">
-          <span>插件</span><span class="badge" id="pluginCount">0</span><span class="chev"></span>
+          <span data-i18n="section.plugins">插件</span><span class="badge" id="pluginCount">0</span><span class="chev"></span>
         </button>
         <div class="acc-body">
           <div id="plugins" class="plugins"></div>
           <div class="install-row">
-            <input id="pluginSpec" placeholder="包名或 github:owner/repo" />
-            <button class="btn tiny" id="btnPluginInstallSpec">安装</button>
+            <input id="pluginSpec" data-i18n-placeholder="plugins.specPlaceholder" placeholder="包名或 github:owner/repo" />
+            <button class="btn tiny" id="btnPluginInstallSpec" data-i18n="plugins.install">安装</button>
           </div>
-          <p class="hint">依赖 pnpm 与 GitHub 访问；安装/更新后需重启服务生效。</p>
+          <p class="hint" data-i18n="plugins.hint">依赖 pnpm 与 GitHub 访问；安装或更新后需重启服务才会生效。</p>
         </div>
       </section>
 
       <section class="acc" data-key="logs">
         <button class="acc-head" data-acc="logs">
-          <span>日志</span><span class="chev"></span>
+          <span data-i18n="section.logs">日志</span><span class="chev"></span>
         </button>
         <div class="acc-body">
           <div class="row between">
             <div class="chips" id="logFilters">
-              <button class="chip active" data-source="all">全部</button>
-              <button class="chip" data-source="server">服务</button>
-              <button class="chip" data-source="client">客户端</button>
-              <button class="chip" data-source="plugin">插件</button>
+              <button class="chip active" data-source="all" data-i18n="logs.all">全部</button>
+              <button class="chip" data-source="server" data-i18n="logs.server">服务</button>
+              <button class="chip" data-source="client" data-i18n="logs.client">客户端</button>
+              <button class="chip" data-source="plugin" data-i18n="logs.plugin">插件</button>
             </div>
             <div class="row">
-              <button class="btn tiny" id="btnLogClear">清空</button>
-              <button class="btn tiny ghost" id="btnLogFile">文件</button>
+              <button class="btn tiny" id="btnLogClear" data-i18n="logs.clear">清空</button>
+              <button class="btn tiny ghost" id="btnLogFile" data-i18n="logs.openFile">打开日志文件</button>
             </div>
           </div>
           <pre class="logs" id="logs"></pre>
@@ -92,26 +94,31 @@
 
       <section class="acc" data-key="settings">
         <button class="acc-head" data-acc="settings">
-          <span>设置</span><span class="chev"></span>
+          <span data-i18n="section.settings">设置</span><span class="chev"></span>
         </button>
         <div class="acc-body">
-          <label class="toggle"><input type="checkbox" id="optOpenAtLogin" /><span>开机自启</span></label>
-          <label class="toggle"><input type="checkbox" id="optAutoStart" /><span>启动客户端时自动拉起服务</span></label>
-          <label class="toggle"><input type="checkbox" id="optOpenUiOnStart" /><span>启动服务后打开界面</span></label>
-          <label class="toggle"><input type="checkbox" id="optAdoptExternal" /><span>自动接管已运行实例</span></label>
-          <label class="toggle"><input type="checkbox" id="optStopOnQuit" /><span>退出时停止服务</span></label>
-          <label class="field"><span>界面主题</span><select id="optTheme"></select></label>
-          <p class="hint" id="themeHint">主题同时切换本客户端与 DSH 界面的配色。</p>
+          <label class="toggle"><input type="checkbox" id="optOpenAtLogin" /><span data-i18n="settings.openAtLogin">开机自启</span></label>
+          <label class="toggle"><input type="checkbox" id="optAutoStart" /><span data-i18n="settings.autoStart">启动客户端时自动拉起服务</span></label>
+          <label class="toggle"><input type="checkbox" id="optOpenUiOnStart" /><span data-i18n="settings.openUiOnStart">启动服务后打开界面</span></label>
+          <label class="toggle"><input type="checkbox" id="optAdoptExternal" /><span data-i18n="settings.adoptExternal">自动接管已运行的实例</span></label>
+          <label class="toggle"><input type="checkbox" id="optStopOnQuit" /><span data-i18n="settings.stopOnQuit">退出客户端时停止服务</span></label>
+          <label class="field"><span data-i18n="settings.theme">界面主题</span><select id="optTheme"></select></label>
+          <p class="hint" data-i18n="settings.themeHint">主题会同时应用到本客户端与 DSH 界面。</p>
+          <label class="toggle"><input type="checkbox" id="optAutoSurface" /><span data-i18n="settings.autoSurface">服务启停时自动切换界面</span></label>
+          <p class="hint" data-i18n="settings.autoSurfaceHint">关闭时由「切换界面」按钮手动控制。</p>
+          <label class="field"><span data-i18n="settings.language">界面语言</span><select id="optLanguage"></select></label>
+          <p class="hint" data-i18n="settings.languageHint">同时切换本客户端与 DSH 界面的语言。</p>
           <dl class="env" id="env"></dl>
           <div class="row">
-            <button class="btn tiny ghost" id="btnHideWindow">隐藏窗口</button>
-            <button class="btn tiny danger" id="btnQuit">退出客户端</button>
+            <button class="btn tiny ghost" id="btnHideWindow" data-i18n="settings.hideWindow">隐藏窗口</button>
+            <button class="btn tiny danger" id="btnQuit" data-i18n="settings.quit">退出客户端</button>
           </div>
         </div>
       </section>
 
     </div>
   </div>
+  <script src="i18n.js"></script>
   <script src="control.js"></script>
 </body>
 </html>

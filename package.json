@@ -1,6 +1,6 @@
 {
   "name": "dsh-desktop-client",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "description": "DSH 桌面客户端 —— 随包自带 DeepSeek Harness，无需 Node.js / pnpm / npx 即可安装使用",
   "main": "main.js",
   "type": "commonjs",
