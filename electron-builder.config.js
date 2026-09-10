@@ -86,7 +86,7 @@ module.exports = {
   win: {
     target: [{ target: 'nsis', arch: ['x64'] }],
     icon: 'assets/icon.ico',
-    artifactName: 'DSH-Client-Setup-${version}.${ext}',
+    artifactName: 'DSHSD-Setup-${version}.${ext}',
   },
   nsis: {
     oneClick: false,
@@ -94,8 +94,10 @@ module.exports = {
     allowToChangeInstallationDirectory: true,
     createDesktopShortcut: true,
     createStartMenuShortcut: true,
-    shortcutName: 'DSH 客户端',
-    uninstallDisplayName: 'DSH 客户端',
+    shortcutName: 'DSHSD',
+    uninstallDisplayName: 'DSHSD',
     deleteAppDataOnUninstall: false,
+    // 构建期把这两个名字回显到日志，便于核对（NSIS 头部是压缩的，二进制里搜不到）
+    include: 'nsis/verify-defines.nsh',
   },
 }

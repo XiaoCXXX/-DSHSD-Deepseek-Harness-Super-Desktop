@@ -4,6 +4,8 @@
 
 > ⚠️ Note: this project was written entirely by DeepSeek — including most of this document. I only maintain it: I direct the agent and verify that the information is correct.
 
+> **DSHSD** = **D**eepseek **H**arness **S**uper **D**esktop — the project's short name. It is what the installer (`DSHSD-Setup-<version>.exe`) and the desktop shortcut are called.
+
 Puts DeepSeek Harness into a real desktop application: **double-click and go — no commands to type, no browser to open, and no need to install Node.js first.**
 
 The installer **ships DSH itself**, so it runs out of the box. The DSH UI fills the window and every control lives in a **floating panel** pinned to the top-right corner. The client extends DSH: you can configure things while the service is stopped, and it adds a full theming system.
@@ -22,8 +24,8 @@ On first launch you need to configure your own API key — that part should be o
 
 ### Install
 
-Double-click `DSH-Client-Setup-<version>.exe` (currently `DSH-Client-Setup-0.1.2.exe`) and keep clicking Next.
-It installs into your user folder, so no administrator rights are needed, and adds a desktop shortcut for launching the client.
+Double-click `DSHSD-Setup-<version>.exe` (currently `DSHSD-Setup-0.1.3.exe`) and keep clicking Next.
+It installs into your user folder, so no administrator rights are needed, and adds a **DSHSD** shortcut to your desktop.
 
 **The target machine does not need Node.js, pnpm or npx** — everything is bundled.
 
@@ -188,7 +190,7 @@ node tools/run-electron.js tools/make-icon.js        # regenerate assets/icon.ic
 ### Build
 
 ```powershell
-npm run build        # produces dist\DSH-Client-Setup-<version>.exe
+npm run build        # produces dist\DSHSD-Setup-<version>.exe
 npm run build:dir    # unpacked directory only (dist\win-unpacked), for debugging
 npm run verify:build # verify the artifact: run the packaged exe and probe its routes
 ```

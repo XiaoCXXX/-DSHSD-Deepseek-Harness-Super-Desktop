@@ -523,7 +523,7 @@ function setOpenAtLogin(enabled) {
 function createTray() {
   if (HIDDEN) return
   tray = new Tray(trayImage())
-  tray.setToolTip('DSH 客户端')
+  tray.setToolTip(tr('app.title'))
   tray.setContextMenu(buildTrayMenu())
   tray.on('click', () => openUi())
   tray.on('double-click', () => sendOverlay('toggle'))

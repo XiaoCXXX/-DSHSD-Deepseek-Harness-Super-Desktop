@@ -1,7 +1,7 @@
 {
   "name": "dsh-desktop-client",
-  "version": "0.1.2",
-  "description": "DSH 桌面客户端 —— 随包自带 DeepSeek Harness，无需 Node.js / pnpm / npx 即可安装使用",
+  "version": "0.1.3",
+  "description": "DSH Desktop Client (DSHSD) — a Windows desktop client for DeepSeek Harness. Ships DSH itself: no Node.js, pnpm or npx required.",
   "main": "main.js",
   "type": "commonjs",
   "scripts": {

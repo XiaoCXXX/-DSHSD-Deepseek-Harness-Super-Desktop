@@ -4,6 +4,8 @@
 
 ⚠️注意：本项目完全由deepseek编写，甚至以下介绍的主体也是deepseek干的，我只负责维护，命令ds干活和检查信息的正确性
 
+**DSHSD** = **D**eepseek **H**arness **S**uper **D**esktop，项目简称；安装包（`DSHSD-Setup-<版本>.exe`）和桌面快捷方式都用这个名字。
+
 把 DeepSeek Harness 装进一个真正的桌面应用：**双击即用，不用敲命令、不用开浏览器，也不用先装 Node.js**。
 
 安装包**自带 DSH 本体**，开箱即可运行；DSH 界面铺满窗口，所有控制项以**悬浮选项栏**浮在右上角。
@@ -21,8 +23,8 @@
 
 ### 安装
 
-双击 `DSH-Client-Setup-<版本>.exe`（当前为 `DSH-Client-Setup-0.1.2.exe`），一路下一步即可（默认装到当前用户目录，无需管理员权限），
-安装完桌面会多一个 **DSH 客户端** 快捷方式。
+双击 `DSHSD-Setup-<版本>.exe`（当前为 `DSHSD-Setup-0.1.3.exe`），一路下一步即可（默认装到当前用户目录，无需管理员权限），
+安装完桌面会多一个 **DSHSD** 快捷方式（快捷方式与卸载项名称都是英文）。
 
 **目标机器不需要预装 Node.js / pnpm / npx** —— 安装包里已经带了。
 
@@ -176,7 +178,7 @@ electron tools/make-icon.js    # 重新生成 assets/icon.ico
 ### 打包
 
 ```powershell
-npm run build        # 生成 dist\DSH-Client-Setup-<version>.exe
+npm run build        # 生成 dist\DSHSD-Setup-<version>.exe
 npm run build:dir    # 只出免安装目录 dist\win-unpacked（调试用）
 npm run verify:build # 验证产物：用独立端口跑打包后的 exe 并检查路由
 ```

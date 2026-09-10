@@ -65,15 +65,19 @@ async function main() {
     note(fs.existsSync(file), `${label}已打包`, fs.existsSync(file) ? '' : path.relative(ROOT, file))
   }
 
-  // 版本号不写死：安装包文件名随 package.json version 变化
-  const setupFiles = fs.existsSync(path.join(ROOT, 'dist'))
-    ? fs.readdirSync(path.join(ROOT, 'dist')).filter((f) => /^DSH-Client-Setup-.*\.exe$/.test(f))
-    : []
-  if (setupFiles.length > 0) {
-    const setupPath = path.join(ROOT, 'dist', setupFiles[0])
-    note(true, '安装程序已生成', `${setupFiles[0]}  ${(fs.statSync(setupPath).size / 1024 / 1024).toFixed(1)} MB`)
+  // 版本号不写死：安装包文件名随 package.json version 变化。
+  // 必须按当前版本精确匹配——dist 下可能还留着旧版本的安装包。
+  const version = JSON.parse(fs.readFileSync(path.join(ROOT, 'package.json'), 'utf8')).version
+  const setupName = `DSHSD-Setup-${version}.exe`
+  const setupPath = path.join(ROOT, 'dist', setupName)
+  if (fs.existsSync(setupPath)) {
+    note(true, '安装程序已生成', `${setupName}  ${(fs.statSync(setupPath).size / 1024 / 1024).toFixed(1)} MB`)
   } else {
-    note(false, '安装程序已生成', 'dist 下未找到 DSH-Client-Setup-*.exe')
+    const stale = fs.existsSync(path.join(ROOT, 'dist'))
+      ? fs.readdirSync(path.join(ROOT, 'dist')).filter((f) => /^DSHSD-Setup-.*\.exe$/.test(f))
+      : []
+    note(false, '安装程序已生成',
+      stale.length ? `缺少 ${setupName}（dist 里只有 ${stale.join(', ')}）` : 'dist 下未找到 DSHSD-Setup-*.exe')
   }
 
   if (!fs.existsSync(APP_EXE)) {
