@@ -207,9 +207,13 @@ function apply(ctx) {
   }
 
   async function targetSession(mode) {
-    if (mode === 'dedicated') return dedicatedSession()
-    const active = await activeSession()
-    return active || dedicatedSession()
+    if (mode === 'active') {
+      const active = await activeSession()
+      // 活跃会话实在找不到才退回专用会话；默认（mode 缺省）就是专用会话，
+      // 悬浮窗的提问必须独立分开，不能因为参数没传对就漏进正在聊的那段对话。
+      return active || dedicatedSession()
+    }
+    return dedicatedSession()
   }
 
   // ---------------------------------------------------------------- 一句话简答
@@ -276,7 +280,8 @@ function apply(ctx) {
   async function handle(req, res) {
     const url = new URL(req.url, 'http://127.0.0.1')
     const question = String(url.searchParams.get('q') || '').trim()
-    const mode = url.searchParams.get('session') === 'dedicated' ? 'dedicated' : 'active'
+    // 缺省即专用会话：只有显式传 session=active 才复用当前活跃会话
+    const mode = url.searchParams.get('session') === 'active' ? 'active' : 'dedicated'
     const summaryMode = url.searchParams.get('summary') === 'truncate' ? 'truncate' : 'model'
     const id = String(url.searchParams.get('id') || '')
 
@@ -296,6 +301,7 @@ function apply(ctx) {
     let sessionId
     try {
       sessionId = await targetSession(mode)
+      console.log(`[quick-ask] 提问落入会话 ${sessionId}（模式 ${mode}）`)
     } catch (error) {
       emit(res, 'error', { message: `无法打开会话：${error?.message || error}` })
       res.end()

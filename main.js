@@ -467,7 +467,7 @@ function applySurfaceWindows(previous, next) {
   if (previous === next) return
   if (next === 'bubble') {
     const win = createBubbleWindow()
-    if (mainWindow && !mainWindow.isDestroyed()) mainWindow.hide()
+    // 便携悬浮窗与主窗口并存：这里刻意不隐藏主窗口，主要界面必须一直在（用户要求）
     if (!HIDDEN && !win.isVisible()) win.showInactive()
     return
   }
@@ -507,12 +507,16 @@ function startQuickAsk(question) {
   quickTurns.push(turn)
   trimQuickTurns()
 
+  // 缺省即专用会话；只有显式 active 才复用当前活跃会话。
+  // 这条要和插件侧 targetSession 的判定保持一致，否则配置写歪了就会静默混进活跃对话。
+  const targetMode = config.all().quickAsk.session === 'active' ? 'active' : 'dedicated'
   const query = new URLSearchParams({
     id,
     q: question,
-    session: config.all().quickAsk.session,
+    session: targetMode,
     summary: config.all().quickAsk.summary,
   })
+  logger.info(tr('log.quickDispatch', { session: targetMode, summary: query.get('summary') }))
   const req = http.request({
     host: '127.0.0.1',
     port: project.port,
