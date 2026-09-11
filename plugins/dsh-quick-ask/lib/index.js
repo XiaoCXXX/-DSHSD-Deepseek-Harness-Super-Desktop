@@ -17,6 +17,9 @@
 
 import { BlockAssembler, createUserMessage } from '@deepseek-ai/dsh-llm'
 import { brandString } from '@deepseek-ai/dsh-brand'
+import fs from 'node:fs'
+import os from 'node:os'
+import path from 'node:path'
 
 const name = 'dsh-quick-ask'
 // 只注入跑不掉的服务。sessions / agentDefaultModel 用 ctx.get() 取：
@@ -32,6 +35,29 @@ const SUMMARY_TIMEOUT_MS = 20000
 const ANSWER_TIMEOUT_MS = 10 * 60 * 1000
 /** 专用会话的标题，方便用户在 DSH 侧边栏里认出来。 */
 const DEDICATED_TITLE = '快速提问 / Quick ask'
+
+/** 插件自己的小状态文件：目前只记专用会话 id，用来跨重启复用同一个会话。 */
+function stateFile() {
+  const home = process.env.DSH_HOME || path.join(os.homedir(), '.dsh')
+  return path.join(home, '.dsh-quick-ask.json')
+}
+
+function readState() {
+  try {
+    const parsed = JSON.parse(fs.readFileSync(stateFile(), 'utf8'))
+    return parsed && typeof parsed === 'object' ? parsed : {}
+  } catch {
+    return {}
+  }
+}
+
+function writeState(patch) {
+  try {
+    const file = stateFile()
+    fs.mkdirSync(path.dirname(file), { recursive: true })
+    fs.writeFileSync(file, `${JSON.stringify({ ...readState(), ...patch }, null, 2)}\n`, 'utf8')
+  } catch { /* 记不住就退回每次新建，不影响提问本身 */ }
+}
 
 /** 把一段文本压到 TRUNCATE_CHARS 以内，尽量断在句子边界。 */
 function truncate(text) {
@@ -162,6 +188,14 @@ function apply(ctx) {
     return null
   }
 
+  /**
+   * 专用会话。**只在进程内复用**：每次 DSH 启动会新建一个「快速提问」会话。
+   *
+   * 试过把 id 记到 $DSH_HOME 里跨重启复用（见 readState/writeState），两种写法都在
+   * 无凭据的沙箱里挂死——直接 prompt 旧 id、或先 create({sessionId}) 收养再 prompt，
+   * 之后都不会产生任何 turn 事件，请求一直等到超时。新建会话的失败是干净的，
+   * 所以先退回这个已证实可用的行为；跨重启复用等有真实 key 的环境再验。
+   */
   async function dedicatedSession() {
     if (dedicatedSessionId) return dedicatedSessionId
     const created = await ctx.sessionController.create({ cwd: process.cwd() })

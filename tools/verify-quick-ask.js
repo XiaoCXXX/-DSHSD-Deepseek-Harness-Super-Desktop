@@ -27,9 +27,10 @@ const PORT = 3099
 
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms))
 
-function get(pathname, timeoutMs = 4000) {
+function get(pathname, cookie, timeoutMs = 4000) {
   return new Promise((resolve) => {
-    const req = http.request({ host: '127.0.0.1', port: PORT, path: pathname, method: 'GET', timeout: timeoutMs }, (res) => {
+    const headers = cookie ? { cookie } : {}
+    const req = http.request({ host: '127.0.0.1', port: PORT, path: pathname, method: 'GET', headers, timeout: timeoutMs }, (res) => {
       let body = ''
       res.setEncoding('utf8')
       res.on('data', (chunk) => { body += chunk })
@@ -102,7 +103,10 @@ async function main() {
     process.exit(1)
   }
 
-  fs.rmSync(SANDBOX, { recursive: true, force: true })
+  // --keep：沿用上一次的沙箱，用来验证「专用会话跨重启复用」而不是每重启一次就新建一个
+  const keep = process.argv.includes('--keep')
+  if (keep) console.log('  （--keep：沿用上一次的沙箱，不重建）')
+  else fs.rmSync(SANDBOX, { recursive: true, force: true })
   fs.mkdirSync(USER_DATA, { recursive: true })
   fs.mkdirSync(HOME, { recursive: true })
   fs.writeFileSync(path.join(USER_DATA, 'config.json'), JSON.stringify({
@@ -149,23 +153,24 @@ async function main() {
   note(fs.existsSync(path.join(profileDir, 'node_modules', 'dsh-quick-ask', 'lib', 'index.js')),
     '插件已复制到 profile node_modules')
 
-  // 路由不是和服务同时就绪的：首次在全新 profile 上启动时，
-  // `/` 能应答之后插件路由还要再等一会儿。这里轮询，别把竞态当成失败。
+  // 自己签发会话 cookie（和客户端同一条路径）。
+  // 必须**先**拿到 cookie：DSH 对未认证的插件路由返回的是 404 而不是 401，
+  // 不带 cookie 去轮询会把「路由正常」误判成「路由不存在」。
+  const { mintSessionCookie } = require('../lib/auth-cookie')
+  const minted = mintSessionCookie('127.0.0.1', PORT)
+  note(Boolean(minted), '可签发会话 cookie')
+  const cookie = minted ? `${minted.name}=${minted.value}` : ''
+
+  // 路由不是和服务同时就绪的：`/` 能应答之后插件路由还要再等一会儿。这里轮询，别把竞态当成失败。
   let routed = false
   let waited = 0
   for (let i = 0; i < 30 && !routed; i++) {
     await sleep(1000)
     waited += 1
-    const probe = await get(`/dsh-quick/ask?q=ping&id=probe`)
+    const probe = await get('/dsh-quick/ask?q=ping&id=probe', cookie)
     routed = probe.status === 200
   }
   note(routed, '快速提问路由已注册', routed ? `等待 ${waited}s` : '等待 30s 仍未出现')
-
-  // 自己签发会话 cookie（和客户端同一条路径）
-  const { mintSessionCookie } = require('../lib/auth-cookie')
-  const minted = mintSessionCookie('127.0.0.1', PORT)
-  note(Boolean(minted), '可签发会话 cookie')
-  const cookie = minted ? `${minted.name}=${minted.value}` : ''
 
   const query = new URLSearchParams({
     id: 'verify-1',
