@@ -95,10 +95,29 @@
     return turns.find((turn) => turn.id === id) || null
   }
 
+  // ------------------------------------------------------------ 主题
+
+  /**
+   * 悬浮窗是**独立窗口**，不会继承主窗口的 DOM，所以必须自己把主题打到 body 上。
+   * theme-tokens.css 是靠 body[data-theme="..."] 出颜色的——不打这个属性，
+   * 所有主题规则都匹配不上，悬浮窗就永远是默认外观。
+   */
+  function applyTheme(theme, animate = false) {
+    const next = theme || 'dsh-white-blue'
+    if (document.body.dataset.theme === next) return
+    if (animate) {
+      document.body.classList.add('theme-anim')
+      clearTimeout(applyTheme._timer)
+      applyTheme._timer = setTimeout(() => document.body.classList.remove('theme-anim'), 340)
+    }
+    document.body.dataset.theme = next
+  }
+
   // ------------------------------------------------------------ 服务状态
 
   function applyState(state) {
     if (!state) return
+    applyTheme(state.config && state.config.theme, true)
     lastState = state.server || lastState
     const label = t(`state.${lastState.state}`)
     els.state.textContent = label
