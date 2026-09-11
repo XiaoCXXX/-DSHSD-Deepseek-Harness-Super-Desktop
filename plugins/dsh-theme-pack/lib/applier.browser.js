@@ -90,22 +90,26 @@
 
   function apply(payload) {
     if (!payload || !payload.theme) return
-    if (isNativeTheme(payload)) {
-      // 原生主题：把控制权整个还给 DSH —— 清掉我们写过的变量、断开基底模式的强制。
-      // 否则切回原生主题时，上一套主题的配色会继续压着 DSH 自己的调色板。
-      clearVars()
-      if (modeObserver) {
-        modeObserver.disconnect()
-        modeObserver = null
-      }
-      appliedId = payload.theme
-      return
-    }
     var scheme = payload.colorScheme === 'dark' ? 'dark' : 'light'
+
+    // 「不覆盖配色」和「不管基底明暗」是两件事，别捆在一起。
+    //
+    // 原生主题不覆盖任何令牌（它的 vars 是空的），但**仍然要钉住基底模式**——
+    // 否则「原生白蓝 ↔ 原生暗色」互相切不动：两套主题都不写变量，
+    // 又都不动 data-ds-dark-theme，页面明暗就永远停在切换前的那个。
+    // 这里曾经把两件事一起 return 掉，正好踩中这个坑。
     pinMode(scheme)
-    // 每次都重放：presenter 可能在主题/系统配色变化时改写，重放成本极低。
-    // applyVars 内部会先清掉上一轮的名字，所以从深色主题切到浅色主题不会留下残影。
-    applyVars(payload.vars || {})
+
+    if (isNativeTheme(payload)) {
+      // 原生主题：清掉我们写过的变量，把配色整个还给 DSH 自己的调色板。
+      // 不清的话，上一套非原生主题留在 html/body 上的 inline + !important
+      // 会继续压着 DSH 的调色板，表现为「切回原生主题没反应」。
+      clearVars()
+    } else {
+      // 每次都重放：presenter 可能在主题/系统配色变化时改写，重放成本极低。
+      // applyVars 内部会先清掉上一轮的名字，所以从深色主题切到浅色主题不会留下残影。
+      applyVars(payload.vars || {})
+    }
     appliedId = payload.theme
   }
 

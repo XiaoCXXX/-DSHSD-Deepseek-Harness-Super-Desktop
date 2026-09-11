@@ -252,6 +252,34 @@ async function main() {
     note(state.rootVar.toUpperCase() !== '#0B2233' && state.rootVar.toUpperCase() !== '#FFFFFF',
       '--dsw-alias-bg-base 已回到 DSH 自己的值（不再是上一套主题的）', state.rootVar)
 
+    // ---- 回归：**原生 ↔ 原生**
+    //
+    // 两套原生主题的 vars 都是空的，谁也不写令牌。如果 applier 因为「原生」就整个
+    // return 掉、连基底模式也不管，data-ds-dark-theme 会一直停在切换前的值，
+    // 表现就是「原生白蓝 ↔ 原生暗色 互相切不动」。这条路径同样从没被测过。
+    console.log('\n— 原生 ↔ 原生（回归）—')
+    await evaluate(control.send, `(() => {
+      const s = document.getElementById('optTheme')
+      s.value = 'dsh-dark'
+      s.dispatchEvent(new Event('change', { bubbles: true }))
+      return true
+    })()`)
+    await sleep(5000)
+    state = await evaluate(dsh.send, DSH_PROBE)
+    note(state.appliedTheme === 'dsh-dark', 'DSH 侧已应用原生暗色', String(state.appliedTheme))
+    note(state.darkAttr === true, '原生暗色 → 基底模式已切到 dark', String(state.darkAttr))
+
+    await evaluate(control.send, `(() => {
+      const s = document.getElementById('optTheme')
+      s.value = 'dsh-white-blue'
+      s.dispatchEvent(new Event('change', { bubbles: true }))
+      return true
+    })()`)
+    await sleep(5000)
+    state = await evaluate(dsh.send, DSH_PROBE)
+    note(state.appliedTheme === 'dsh-white-blue', 'DSH 侧已应用原生白蓝', String(state.appliedTheme))
+    note(state.darkAttr === false, '原生白蓝 → 基底模式已切回 light', String(state.darkAttr))
+
     dsh.ws.close()
     control.ws.close()
   } finally {
