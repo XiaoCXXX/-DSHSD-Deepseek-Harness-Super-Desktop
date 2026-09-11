@@ -462,6 +462,24 @@ function createBubbleWindow() {
   return bubbleWindow
 }
 
+/**
+ * 关掉便携悬浮窗：收起它，并回到「能看到 DSH 界面」的形态。
+ *
+ * 主窗口在悬浮窗形态下是**一直可见**的（用户要求），所以这里只收悬浮窗，
+ * 并把形态从 bubble 切回 bar。之前悬浮窗的 ✕ 复用了主窗口的 app:hideWindow，
+ * 结果「关悬浮窗」把主界面藏了、悬浮窗自己还在——反了。
+ */
+function closeBubbleWindow() {
+  if (bubbleWindow && !bubbleWindow.isDestroyed()) bubbleWindow.hide()
+  if (activeSurface() === 'bubble') {
+    config.patch({ surface: 'bar' })
+    pushState()          // 形态变化由 pushState 负责收悬浮窗、把主窗口叫到前面
+  } else {
+    showWindow()
+  }
+  return { ok: true }
+}
+
 /** 形态发生切换时，决定该露哪个窗口。只在真正变化时动作，避免反复抢焦点。 */
 function applySurfaceWindows(previous, next) {
   if (previous === next) return
@@ -933,6 +951,8 @@ function registerIpc() {
   }))
   ipcMain.handle('app:quit', () => { quitting = true; app.quit(); return { ok: true } })
   ipcMain.handle('app:hideWindow', () => { if (mainWindow) mainWindow.hide(); return { ok: true } })
+  // 悬浮窗的 ✕ 走这条：收悬浮窗、回主界面，不碰主窗口的显示状态
+  ipcMain.handle('bubble:close', () => closeBubbleWindow())
 
   ipcMain.handle('server:start', () => doStart())
   ipcMain.handle('server:stop', () => doStop())

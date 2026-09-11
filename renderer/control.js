@@ -115,7 +115,13 @@ let lastSurface = ''
 
 /** 服务未运行 → 全面控制台（铺满窗口、面板全开）；启动中/运行中 → 右上角悬浮条。 */
 function applySurface() {
-  const next = current && current.surface === 'console' ? 'console' : 'bar'
+  const raw = (current && current.surface) || 'bar'
+  // 悬浮窗是**另一个窗口**，主窗口在它打开时照常显示；这里按悬浮条渲染即可
+  const next = raw === 'console' ? 'console' : 'bar'
+  // 悬浮窗开着时，主界面要能把它关掉
+  const inBubble = raw === 'bubble'
+  const back = $('btnLeaveBubble')
+  if (back) back.hidden = !inBubble
   const changed = next !== lastSurface
   document.body.dataset.surface = next
   if (next === 'console') {
@@ -451,6 +457,7 @@ function bind() {
   $('btnSurfaceBar').addEventListener('click', () => api.setSurface('toggle'))
   $('btnSurfaceConsole').addEventListener('click', () => api.setSurface('toggle'))
   $('btnBubble').addEventListener('click', () => api.setSurface('bubble'))
+  $('btnLeaveBubble').addEventListener('click', () => api.setSurface('bar'))
   $('optAutoSurface').addEventListener('change', (e) => api.patchConfig({ autoSurface: e.target.checked }))
 
   $('optQuickSession').addEventListener('change', (e) => {

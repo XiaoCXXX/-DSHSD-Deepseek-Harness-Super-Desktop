@@ -158,7 +158,7 @@
   els.stop.addEventListener('click', () => api.stop())
   els.restart.addEventListener('click', () => api.restart())
   els.openDsh.addEventListener('click', () => api.quickOpenInDsh())
-  els.hide.addEventListener('click', () => api.hideWindow())
+  els.hide.addEventListener('click', () => api.closeBubble())
 
   // ------------------------------------------------------------ 事件
 

@@ -10,6 +10,8 @@ contextBridge.exposeInMainWorld('dshClient', {
 
   quit: () => ipcRenderer.invoke('app:quit'),
   hideWindow: () => ipcRenderer.invoke('app:hideWindow'),
+  /** 悬浮窗的 ✕：收悬浮窗、回主界面（不等于隐藏主窗口）。 */
+  closeBubble: () => ipcRenderer.invoke('bubble:close'),
 
   start: () => ipcRenderer.invoke('server:start'),
   stop: () => ipcRenderer.invoke('server:stop'),
