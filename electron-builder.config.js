@@ -41,15 +41,17 @@ function findNodeModulesDirs(root) {
 /** 为一个物料目录生成 extraResources 条目（含其内部各层 node_modules）。 */
 function resourceEntries(sourceDir, targetName) {
   if (!fs.existsSync(sourceDir)) return []
+  // *.orig 是 tools/patch-vendor-console.js 留下的补丁备份，不进安装包
+  const filter = ['**/*', '!**/*.orig']
   const entries = [
     // 普通文件与不含 node_modules 的部分
-    { from: sourceDir, to: targetName, filter: ['**/*'] },
+    { from: sourceDir, to: targetName, filter },
   ]
   for (const dir of findNodeModulesDirs(sourceDir)) {
     entries.push({
       from: dir,
       to: path.join(targetName, path.relative(sourceDir, dir)),
-      filter: ['**/*'],
+      filter,
     })
   }
   return entries

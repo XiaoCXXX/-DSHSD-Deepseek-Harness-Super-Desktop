@@ -12,6 +12,7 @@ const fs = require('node:fs')
 const os = require('node:os')
 const path = require('node:path')
 const { execFileSync } = require('node:child_process')
+const { patchDshRoot } = require('./patch-vendor-console')
 
 const ROOT = path.resolve(__dirname, '..')
 const VENDOR_DSH = path.join(ROOT, 'vendor', 'dsh')
@@ -35,11 +36,15 @@ function ensureDsh() {
     path.join(VENDOR_DSH, 'package.json'),
     JSON.stringify({ name: 'dsh-bundled-runtime', version: '1.0.0', private: true }, null, 2),
   )
-  execFileSync(
-    'npm',
-    ['install', '--prefix', VENDOR_DSH, `@deepseek-ai/dsh@${DSH_VERSION}`, '--ignore-scripts', '--no-audit', '--no-fund'],
-    { stdio: 'inherit', shell: true },
-  )
+  const args = ['install', '--prefix', VENDOR_DSH, `@deepseek-ai/dsh@${DSH_VERSION}`, '--ignore-scripts', '--no-audit', '--no-fund']
+  // 优先直接用 node 跑 npm-cli.js：走 `npm` 会经由 npm.cmd → cmd.exe，
+  // 在没有控制台的宿主里每个 cmd.exe 都会新建一个可见的控制台窗口。
+  const npmCli = [
+    path.join(path.dirname(process.execPath), 'node_modules', 'npm', 'bin', 'npm-cli.js'),
+    path.join(path.dirname(process.execPath), '..', 'lib', 'node_modules', 'npm', 'bin', 'npm-cli.js'),
+  ].find((candidate) => fs.existsSync(candidate))
+  if (npmCli) execFileSync(process.execPath, [npmCli, ...args], { stdio: 'inherit' })
+  else execFileSync('npm', args, { stdio: 'inherit', shell: true })
 }
 
 function ensureWhale() {
@@ -89,6 +94,9 @@ function ensureWhale() {
 
 try {
   ensureDsh()
+  // 桌面客户端的 DSH 跑在 Electron（无控制台的 GUI 进程）里，不补这个标志的话
+  // 每条 shell 命令都会弹出一个可见的控制台窗口。
+  patchDshRoot(VENDOR_DSH, log)
   ensureWhale()
   log('物料准备完成')
 } catch (error) {
