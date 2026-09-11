@@ -19,6 +19,18 @@ const { spawn, execFileSync } = require('node:child_process')
 
 const ROOT = path.resolve(__dirname, '..')
 const ELECTRON = path.join(ROOT, 'node_modules', 'electron', 'dist', 'electron.exe')
+
+/**
+ * 子进程环境：必须清掉 ELECTRON_RUN_AS_NODE。
+ * 当宿主（例如客户端用「Electron 当 Node」拉起的 bundled dsh web）带着这个变量时，
+ * electron.exe 会退化成纯 Node，require('electron').app 为 undefined，
+ * 客户端一启动就崩在 main.js 的 app.commandLine 上。
+ */
+const childEnv = () => {
+  const env = { ...process.env }
+  delete env.ELECTRON_RUN_AS_NODE
+  return env
+}
 const OUT_DIR = path.join(ROOT, '.verify')
 
 const { surfaceForState } = require('../lib/surface')
@@ -122,6 +134,7 @@ async function launch(userDataDir, cdpPort) {
   fs.mkdirSync(OUT_DIR, { recursive: true })
   const child = spawn(ELECTRON, ['.', '--hidden', `--user-data-dir=${userDataDir}`, `--remote-debugging-port=${cdpPort}`], {
     cwd: ROOT,
+    env: childEnv(),
     stdio: ['ignore', 'pipe', 'pipe'],
     windowsHide: true,
   })
