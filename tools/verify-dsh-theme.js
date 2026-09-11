@@ -14,6 +14,18 @@ const { spawn, execFileSync } = require('node:child_process')
 
 const ROOT = path.resolve(__dirname, '..')
 const ELECTRON = path.join(ROOT, 'node_modules', 'electron', 'dist', 'electron.exe')
+
+/**
+ * 子进程环境：必须清掉 ELECTRON_RUN_AS_NODE。
+ * 当宿主（例如客户端用「Electron 当 Node」拉起的 bundled dsh web）带着这个变量时，
+ * electron.exe 会退化成纯 Node，require('electron').app 为 undefined，
+ * 客户端一启动就崩在 main.js 的 app.commandLine 上。
+ */
+const childEnv = () => {
+  const env = { ...process.env }
+  delete env.ELECTRON_RUN_AS_NODE
+  return env
+}
 const OUT_DIR = path.join(ROOT, '.verify')
 const USER_DATA = path.join(OUT_DIR, 'userdata-dsh-theme')
 const CDP_PORT = 9233
@@ -129,6 +141,7 @@ async function main() {
 
   const child = spawn(ELECTRON, ['.', '--hidden', `--user-data-dir=${USER_DATA}`, `--remote-debugging-port=${CDP_PORT}`], {
     cwd: ROOT,
+    env: childEnv(),
     stdio: ['ignore', 'pipe', 'pipe'],
     windowsHide: true,
   })
@@ -201,6 +214,44 @@ async function main() {
       'DSH 界面实际绘制底色 = 白',
       `html=${state.rootBg} body=${state.bodyBg}`,
     )
+
+    // ---- 回归：切回**原生**主题（曾经切不回来）
+    //
+    // 原生主题的 vars 是空的 {}，applier 只设置、不清理时，上一套主题的
+    // inline + !important 变量会永远留在 html/body 上，压住 DSH 自己的调色板。
+    // 上游脚本从没覆盖过这条路径（只测了 ocean → contrast，两者都自带整套变量）。
+    console.log('\n— 切回原生主题（回归）—')
+    const back = await evaluate(control.send, `(() => {
+      const select = document.getElementById('optTheme')
+      select.value = 'dsh-white-blue'
+      select.dispatchEvent(new Event('change', { bubbles: true }))
+      return document.body.dataset.theme
+    })()`)
+    note(back === 'dsh-white-blue', '客户端切回原生主题', String(back))
+    note(JSON.parse(fs.readFileSync(THEME_FILE, 'utf8')).theme === 'dsh-white-blue', '已同步到 DSH 侧文件')
+
+    await sleep(5000)
+    state = await evaluate(dsh.send, DSH_PROBE)
+    note(state.appliedTheme === 'dsh-white-blue', 'DSH 界面切回原生主题', String(state.appliedTheme))
+    note(state.darkAttr === false, '原生浅色主题 → 基底模式是 light')
+
+    // 关键断言：主题包写下的 --dsw-* 内联变量必须已经清干净。
+    // 只查 --dsw-*：html/body 上还有 DSH 自己写的内联值（color-scheme、
+    // --dsh-content-font-size 之类），那是宿主的东西，不该算在主题包头上。
+    const leftovers = await evaluate(dsh.send, `(() => {
+      const stuck = []
+      for (const el of [document.documentElement, document.body]) {
+        for (let i = 0; i < el.style.length; i++) {
+          const name = el.style[i]
+          if (name.indexOf('--dsw-') === 0) stuck.push(name)
+        }
+      }
+      return { count: stuck.length, names: stuck.slice(0, 8) }
+    })()`)
+    note(leftovers.count === 0, '原生主题下没有残留的 --dsw-* 内联变量', JSON.stringify(leftovers))
+    note(state.rootVar.toUpperCase() !== '#0B2233' && state.rootVar.toUpperCase() !== '#FFFFFF',
+      '--dsw-alias-bg-base 已回到 DSH 自己的值（不再是上一套主题的）', state.rootVar)
+
     dsh.ws.close()
     control.ws.close()
   } finally {
