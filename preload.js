@@ -32,6 +32,12 @@ contextBridge.exposeInMainWorld('dshClient', {
 
   refreshBalance: () => ipcRenderer.invoke('balance:refresh'),
 
+  /** 便携悬浮窗：快速提问。返回 { requestId }，回答通过 onQuickEvent 流式回来。 */
+  quickAsk: (payload) => ipcRenderer.invoke('quick:ask', payload),
+  quickCancel: () => ipcRenderer.invoke('quick:cancel'),
+  quickHistory: () => ipcRenderer.invoke('quick:history'),
+  quickOpenInDsh: (turnId) => ipcRenderer.invoke('quick:openInDsh', turnId),
+
   /** 上报悬浮栏自身的内容尺寸，主进程据此精确设置视图区域。 */
   overlayResize: (size) => ipcRenderer.invoke('overlay:resize', size),
 
@@ -39,4 +45,5 @@ contextBridge.exposeInMainWorld('dshClient', {
   onLog: (callback) => ipcRenderer.on('log', (_event, line) => callback(line)),
   onBalance: (callback) => ipcRenderer.on('balance', (_event, value) => callback(value)),
   onOverlayCommand: (callback) => ipcRenderer.on('overlay:command', (_event, command) => callback(command)),
+  onQuickEvent: (callback) => ipcRenderer.on('quick:event', (_event, event) => callback(event)),
 })

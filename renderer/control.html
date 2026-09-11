@@ -20,6 +20,7 @@
       <span class="spacer"></span>
       <button class="icon-btn" id="btnSurfaceBar" data-i18n-title="surface.toConsole" title="切换到客户端界面">▣</button>
       <button class="btn tiny ghost" id="btnSurfaceConsole" data-i18n="surface.toDsh">返回 DSH 界面</button>
+      <button class="icon-btn" id="btnBubble" data-i18n-title="surface.toBubble" title="便携悬浮窗">❐</button>
       <button class="icon-btn" id="btnQuickStart" data-i18n-title="bar.start" title="启动服务">▶</button>
       <button class="icon-btn" id="btnQuickStop" data-i18n-title="bar.stop" title="停止服务">■</button>
       <button class="icon-btn" id="btnQuickRestart" data-i18n-title="bar.restart" title="重启服务">⟳</button>
@@ -108,6 +109,9 @@
           <p class="hint" data-i18n="settings.autoSurfaceHint">关闭时由「切换界面」按钮手动控制。</p>
           <label class="field"><span data-i18n="settings.language">界面语言</span><select id="optLanguage"></select></label>
           <p class="hint" data-i18n="settings.languageHint">同时切换本客户端与 DSH 界面的语言。</p>
+          <label class="field"><span data-i18n="settings.quickSession">快速提问落在哪个会话</span><select id="optQuickSession"></select></label>
+          <label class="field"><span data-i18n="settings.quickSummary">简答怎么产生</span><select id="optQuickSummary"></select></label>
+          <p class="hint" data-i18n="quick.empty">问点什么，回答会简短地显示在这里；完整回答在 DSH 界面里。</p>
           <dl class="env" id="env"></dl>
           <div class="row">
             <button class="btn tiny ghost" id="btnHideWindow" data-i18n="settings.hideWindow">隐藏窗口</button>

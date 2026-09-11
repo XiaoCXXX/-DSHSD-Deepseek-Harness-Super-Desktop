@@ -1,0 +1,43 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <meta http-equiv="Content-Security-Policy"
+        content="default-src 'self'; style-src 'self' 'unsafe-inline'; script-src 'self'; img-src 'self' data:" />
+  <title data-i18n="quick.title">快速提问</title>
+  <link rel="stylesheet" href="theme-tokens.css" />
+  <link rel="stylesheet" href="bubble.css" />
+</head>
+<body>
+  <div id="bubble">
+    <!-- 悬浮控制台：既是状态条，也是窗口的拖动把手 -->
+    <header class="head" id="head">
+      <span class="grip" aria-hidden="true">⠿</span>
+      <span class="dot" id="dot"></span>
+      <span class="state" id="state" data-i18n="common.loading">读取中</span>
+      <span class="balance" id="balance">--</span>
+      <span class="spacer"></span>
+      <button class="icon-btn" id="btnStart" data-i18n-title="bar.start" title="启动服务">▶</button>
+      <button class="icon-btn" id="btnStop" data-i18n-title="bar.stop" title="停止服务">■</button>
+      <button class="icon-btn" id="btnRestart" data-i18n-title="bar.restart" title="重启服务">⟳</button>
+      <button class="icon-btn accent" id="btnOpenDsh" data-i18n-title="quick.openDsh" title="在 DSH 界面查看">⤢</button>
+      <button class="icon-btn" id="btnHide" data-i18n-title="quick.hide" title="隐藏悬浮窗">✕</button>
+    </header>
+
+    <!-- 对话气泡列表 -->
+    <main class="thread" id="thread">
+      <p class="empty" id="empty" data-i18n="quick.empty">问点什么，回答会简短地显示在这里；完整回答在 DSH 界面里。</p>
+    </main>
+
+    <!-- 输入区 -->
+    <footer class="compose">
+      <textarea id="input" rows="1" data-i18n-placeholder="quick.placeholder"
+                placeholder="输入问题，Enter 发送 / Shift+Enter 换行"></textarea>
+      <button class="send" id="btnSend" data-i18n-title="quick.send" title="发送">↵</button>
+    </footer>
+  </div>
+
+  <script src="i18n.js"></script>
+  <script src="bubble.js"></script>
+</body>
+</html>

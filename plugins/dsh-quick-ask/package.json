@@ -1,0 +1,24 @@
+{
+  "name": "dsh-quick-ask",
+  "version": "0.1.0",
+  "description": "DSH 快速提问后端：把一次提问送进会话，并把回答与一句话简答以 SSE 推给桌面客户端的便携悬浮窗",
+  "keywords": [
+    "dsh",
+    "dsh-plugin",
+    "deepseek-harness",
+    "quick-ask"
+  ],
+  "type": "module",
+  "main": "lib/index.js",
+  "files": [
+    "lib",
+    "cordis.patch.yml",
+    "README.md"
+  ],
+  "dsh": {
+    "bundle": {
+      "patch": "./cordis.patch.yml"
+    }
+  },
+  "license": "MIT"
+}

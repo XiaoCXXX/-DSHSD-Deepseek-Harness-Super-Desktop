@@ -42,6 +42,10 @@ const { writeDshLanguage } = require('./lib/dsh-settings')
 const PARTITION = 'persist:dsh'
 const WHALE_SPEC = 'github:MeteorNOX/DeepSeek-Balance-Whale-Widget'
 const WHALE_NAME = 'dsh-whale-widget'
+/** 快速提问后端，便携悬浮窗靠它拿回答。源码在仓库的 plugins/ 下。 */
+const QUICK_NAME = 'dsh-quick-ask'
+/** 随包分发、每次启动都要确保已启用的插件。 */
+const BUNDLED_PLUGINS = [WHALE_NAME, QUICK_NAME]
 const OVERLAY_MARGIN = 14
 const DEFAULT_OVERLAY_SIZE = { width: 268, height: 46 }
 
@@ -168,16 +172,18 @@ function listPlugins() {
 function prepareEnvironment() {
   const dir = profileDir(dshHome())
   const runtime = resolveRuntime()
-  const whaleSource = bundledPluginDir(WHALE_NAME)
+  const plugins = BUNDLED_PLUGINS.map((name) => ({ name, sourceDir: bundledPluginDir(name) }))
   const result = ensureProfile({
     dir,
-    plugins: [{ name: WHALE_NAME, sourceDir: whaleSource }],
+    plugins,
     log: (key, params) => logger.info(tr(key, params)),
   })
-  if (!whaleSource) {
-    logger.error(tr('log.whaleMissing', { name: WHALE_NAME }))
-  } else if (!resolvePackageDir(WHALE_NAME, { dshRoot: runtime.dshRoot, profile: dir })) {
-    logger.error(tr('log.pluginNotInstalled', { name: WHALE_NAME }))
+  for (const { name, sourceDir } of plugins) {
+    if (!sourceDir) {
+      logger.error(tr('log.whaleMissing', { name }))
+    } else if (!resolvePackageDir(name, { dshRoot: runtime.dshRoot, profile: dir })) {
+      logger.error(tr('log.pluginNotInstalled', { name }))
+    }
   }
   return { ...result, runtime: runtime.mode }
 }
@@ -199,14 +205,16 @@ function tr(key, params) {
 /**
  * 当前应显示的界面形态。
  * 自动模式跟随服务状态；手动模式用用户选定的形态（未选过则按状态推导一次）。
+ * 'bubble'（便携悬浮窗）只能手动选——它跟服务状态无关，自动推导不出来。
  * @param {string} state - 服务状态
- * @returns {'bar'|'console'}
+ * @returns {'bar'|'console'|'bubble'}
  */
 function currentSurface(state) {
   const derived = surfaceForState(state)
   if (config.all().autoSurface) return derived
   const manual = config.all().surface
-  return manual === 'bar' || manual === 'console' ? manual : derived
+  if (manual === 'bar' || manual === 'console' || manual === 'bubble') return manual
+  return derived
 }
 
 /** 把当前语言同步给 DSH 自身（写 $DSH_HOME/settings.yaml 的 locale.preference）。 */
@@ -264,12 +272,18 @@ function activeSurface() {
 function pushState() {
   const nextSurface = activeSurface()
   if (nextSurface !== surface) {
+    const previous = surface
     surface = nextSurface
     // 形态切换立刻重排：控制台铺满窗口，悬浮条锚定右上角
     if (mainWindow && !mainWindow.isDestroyed()) layoutViews()
+    // 悬浮窗形态要换成另一个窗口来承载
+    applySurfaceWindows(previous, nextSurface)
   }
   if (overlayView && !overlayView.webContents.isDestroyed()) {
     overlayView.webContents.send('state', fullState())
+  }
+  if (bubbleWindow && !bubbleWindow.isDestroyed()) {
+    bubbleWindow.webContents.send('state', fullState())
   }
   updateTray()
 }
@@ -385,6 +399,238 @@ function showWindow() {
     mainWindow.show()
     mainWindow.focus()
   }
+}
+
+// ---------------------------------------------------------------- 便携悬浮窗
+
+// 「便携悬浮窗」模式下整个客户端只剩两件东西：悬浮控制台 + 可以打字的气泡。
+// 它用一个独立的无边框置顶小窗承载——主窗口不能改 frame，形态之间来回切会很难看。
+// 提问走随包插件 dsh-quick-ask 暴露的 SSE 路由：插件在 DSH 进程内用
+// sessionController 发问、用 session/event 收答案，客户端不需要碰 DSH 的内部协议。
+
+/** 够放下控制条和几轮问答，又不至于挡住视线。 */
+const BUBBLE_WIDTH = 380
+const BUBBLE_HEIGHT = 540
+/** 随包插件 dsh-quick-ask 的路由（GET + text/event-stream）。 */
+const QUICK_PATH = '/dsh-quick/ask'
+/** 气泡里最多保留多少轮，避免长期开着无限增长。 */
+const QUICK_MAX_TURNS = 40
+
+let bubbleWindow = null
+/** 正在进行的提问：{ id, req }；同一时刻只允许一个。 */
+let quickActive = null
+/** 快速提问历史（仅内存）：气泡窗口重开时据此恢复。 */
+const quickTurns = []
+
+function createBubbleWindow() {
+  if (bubbleWindow && !bubbleWindow.isDestroyed()) return bubbleWindow
+  bubbleWindow = new BrowserWindow({
+    width: BUBBLE_WIDTH,
+    height: BUBBLE_HEIGHT,
+    minWidth: 300,
+    minHeight: 280,
+    show: false,
+    frame: false,
+    transparent: true,
+    hasShadow: false,
+    resizable: true,
+    maximizable: false,
+    fullscreenable: false,
+    skipTaskbar: true,
+    alwaysOnTop: true,
+    title: 'DSH',
+    icon: whaleIcon(),
+    webPreferences: {
+      preload: path.join(__dirname, 'preload.js'),
+      contextIsolation: true,
+      nodeIntegration: false,
+      transparent: true,
+    },
+  })
+  bubbleWindow.setMenuBarVisibility(false)
+  // floating 层：普通窗口之上，但不至于盖住系统对话框
+  bubbleWindow.setAlwaysOnTop(true, 'floating')
+  bubbleWindow.loadFile(path.join(__dirname, 'renderer', 'bubble.html'))
+  bubbleWindow.webContents.setBackgroundThrottling(false)
+  bubbleWindow.on('close', (event) => {
+    if (quitting) return
+    // 关掉悬浮窗 = 收起，不是退出客户端
+    event.preventDefault()
+    bubbleWindow.hide()
+  })
+  bubbleWindow.on('closed', () => { bubbleWindow = null })
+  return bubbleWindow
+}
+
+/** 形态发生切换时，决定该露哪个窗口。只在真正变化时动作，避免反复抢焦点。 */
+function applySurfaceWindows(previous, next) {
+  if (previous === next) return
+  if (next === 'bubble') {
+    const win = createBubbleWindow()
+    if (mainWindow && !mainWindow.isDestroyed()) mainWindow.hide()
+    if (!HIDDEN && !win.isVisible()) win.showInactive()
+    return
+  }
+  if (bubbleWindow && !bubbleWindow.isDestroyed()) bubbleWindow.hide()
+  // 从悬浮窗切回来看 DSH 界面：把主窗口叫回来
+  if (previous === 'bubble') showWindow()
+}
+
+function pushQuickEvent(event) {
+  if (bubbleWindow && !bubbleWindow.isDestroyed()) {
+    bubbleWindow.webContents.send('quick:event', event)
+  }
+}
+
+function trimQuickTurns() {
+  while (quickTurns.length > QUICK_MAX_TURNS) quickTurns.shift()
+}
+
+/**
+ * 向随包插件发起一次快速提问，并把 SSE 事件转发给气泡窗口。
+ * @param {string} question
+ * @returns {{ok:boolean, id?:string, error?:string}}
+ */
+function startQuickAsk(question) {
+  const project = config.activeProject()
+  if (!project) return { ok: false, error: tr('quick.noProject') }
+  if (quickActive) return { ok: false, error: tr('quick.busy') }
+  if (server.snapshot().state !== 'running' && server.snapshot().state !== 'external') {
+    return { ok: false, error: tr('quick.notRunning') }
+  }
+
+  const minted = mintSessionCookie('127.0.0.1', project.port)
+  if (!minted) return { ok: false, error: tr('quick.noCookie') }
+
+  const id = `q-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`
+  const turn = { id, question, answer: '', summary: '', status: 'running', error: '' }
+  quickTurns.push(turn)
+  trimQuickTurns()
+
+  const query = new URLSearchParams({
+    id,
+    q: question,
+    session: config.all().quickAsk.session,
+    summary: config.all().quickAsk.summary,
+  })
+  const req = http.request({
+    host: '127.0.0.1',
+    port: project.port,
+    path: `${QUICK_PATH}?${query.toString()}`,
+    method: 'GET',
+    headers: { accept: 'text/event-stream', cookie: `${minted.name}=${minted.value}` },
+  }, (res) => {
+    if (res.statusCode !== 200) {
+      let body = ''
+      res.setEncoding('utf8')
+      res.on('data', (chunk) => { body += chunk })
+      res.on('end', () => finishQuick(turn, {
+        type: 'error',
+        message: tr('quick.httpError', { status: res.statusCode, body: body.slice(0, 160) }),
+      }))
+      return
+    }
+    res.setEncoding('utf8')
+    let buffer = ''
+    res.on('data', (chunk) => {
+      buffer += chunk
+      // SSE：事件之间用空行分隔
+      let at
+      while ((at = buffer.indexOf('\n\n')) !== -1) {
+        const raw = buffer.slice(0, at)
+        buffer = buffer.slice(at + 2)
+        const event = parseSse(raw)
+        if (event) consumeQuickEvent(turn, event)
+      }
+    })
+    res.on('end', () => {
+      if (turn.status === 'running') finishQuick(turn, { type: 'error', message: tr('quick.closed') })
+    })
+  })
+
+  req.on('error', (error) => {
+    finishQuick(turn, { type: 'error', message: tr('quick.netError', { message: error.message }) })
+  })
+  req.end()
+  quickActive = { id, req }
+  pushQuickEvent({ type: 'start', id, question })
+  return { ok: true, id }
+}
+
+function parseSse(raw) {
+  let name = 'message'
+  const dataLines = []
+  for (const line of raw.split('\n')) {
+    if (line.startsWith('event:')) name = line.slice(6).trim()
+    else if (line.startsWith('data:')) dataLines.push(line.slice(5).trim())
+  }
+  if (dataLines.length === 0) return null
+  try {
+    return { type: name, ...JSON.parse(dataLines.join('\n')) }
+  } catch {
+    return null
+  }
+}
+
+function consumeQuickEvent(turn, event) {
+  if (event.type === 'answer') {
+    turn.answer = String(event.text || '')
+    pushQuickEvent({ type: 'answer', id: turn.id, text: turn.answer })
+    return
+  }
+  if (event.type === 'summary') {
+    turn.summary = String(event.text || '')
+    pushQuickEvent({ type: 'summary', id: turn.id, text: turn.summary })
+    return
+  }
+  if (event.type === 'done') {
+    finishQuick(turn, { type: 'done', answer: turn.answer, sessionId: event.sessionId })
+    return
+  }
+  if (event.type === 'error') {
+    finishQuick(turn, { type: 'error', message: String(event.message || tr('quick.failed')) })
+  }
+}
+
+function finishQuick(turn, event) {
+  if (turn.status !== 'running') return
+  if (event.type === 'done') {
+    turn.status = 'done'
+    if (typeof event.answer === 'string' && event.answer) turn.answer = event.answer
+    if (!turn.summary) turn.summary = turn.answer
+    turn.sessionId = event.sessionId || ''
+  } else {
+    turn.status = 'failed'
+    turn.error = event.message || tr('quick.failed')
+  }
+  quickActive = null
+  pushQuickEvent({ ...event, id: turn.id })
+  logger.info(tr('log.quickDone', { id: turn.id, status: turn.status }))
+}
+
+function cancelQuickAsk() {
+  if (quickActive) {
+    try { quickActive.req.destroy() } catch { /* 已经结束 */ }
+    const turn = quickTurns.find((item) => item.id === quickActive.id)
+    if (turn && turn.status === 'running') {
+      turn.status = 'failed'
+      turn.error = tr('quick.cancelled')
+      pushQuickEvent({ type: 'error', id: turn.id, message: turn.error })
+    }
+    quickActive = null
+  }
+  return { ok: true }
+}
+
+/** 「查看完整回答」：切回能看到 DSH 界面的形态，并把窗口叫到前面。 */
+function openQuickInDsh() {
+  if (activeSurface() === 'bubble') {
+    config.patch({ surface: 'bar' })
+    pushState()          // 形态变化由 pushState 检测并切换窗口
+  } else {
+    showWindow()
+  }
+  return { ok: true }
 }
 
 // ---------------------------------------------------------------- 界面加载
@@ -713,13 +959,26 @@ function registerIpc() {
    */
   ipcMain.handle('surface:set', (_event, value) => {
     const state = server ? server.snapshot().state : 'stopped'
-    const next = value === 'toggle'
-      ? (currentSurface(state) === 'console' ? 'bar' : 'console')
-      : (value === 'console' ? 'console' : 'bar')
+    let next
+    if (value === 'toggle') next = currentSurface(state) === 'console' ? 'bar' : 'console'
+    else if (value === 'bubble') next = 'bubble'
+    else if (value === 'console') next = 'console'
+    else next = 'bar'
     config.patch({ surface: next, autoSurface: false })
     pushState()
     return next
   })
+
+  // ---------------------------------------------------------- 便携悬浮窗
+
+  ipcMain.handle('quick:ask', (_event, payload) => {
+    const question = String(payload?.question || '').trim()
+    if (!question) return { ok: false, error: tr('quick.emptyQuestion') }
+    return startQuickAsk(question)
+  })
+  ipcMain.handle('quick:cancel', () => cancelQuickAsk())
+  ipcMain.handle('quick:history', () => quickTurns)
+  ipcMain.handle('quick:openInDsh', () => openQuickInDsh())
 
   ipcMain.handle('project:upsert', async (_event, project) => {
     const saved = config.upsertProject(project || {})

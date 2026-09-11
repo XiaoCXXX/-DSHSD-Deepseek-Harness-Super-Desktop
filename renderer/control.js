@@ -352,11 +352,42 @@ function renderSettings() {
     .join('')
 }
 
+function renderQuickAsk() {
+  const quick = (current && current.config && current.config.quickAsk) || {}
+  const language = (current && current.language) || 'zh'
+
+  const session = $('optQuickSession')
+  if (session) {
+    // 选项文案跟语言走，换语言要重建
+    if (session.dataset.lang !== language) {
+      session.innerHTML = [
+        `<option value="active">${escapeHtml(t('settings.quickSessionActive'))}</option>`,
+        `<option value="dedicated">${escapeHtml(t('settings.quickSessionDedicated'))}</option>`,
+      ].join('')
+      session.dataset.lang = language
+    }
+    session.value = quick.session === 'dedicated' ? 'dedicated' : 'active'
+  }
+
+  const summary = $('optQuickSummary')
+  if (summary) {
+    if (summary.dataset.lang !== language) {
+      summary.innerHTML = [
+        `<option value="model">${escapeHtml(t('settings.quickSummaryModel'))}</option>`,
+        `<option value="truncate">${escapeHtml(t('settings.quickSummaryTruncate'))}</option>`,
+      ].join('')
+      summary.dataset.lang = language
+    }
+    summary.value = quick.summary === 'truncate' ? 'truncate' : 'model'
+  }
+}
+
 function renderAll({ animateTheme = false } = {}) {
   if (!current) return
   applyTheme(animateTheme)
   renderThemes()
   renderLanguages()
+  renderQuickAsk()
   applySurface()
   renderBar()
   renderServer()
@@ -419,7 +450,15 @@ function bind() {
   // 界面形态手动切换：悬浮条里是图标、控制台里是带文字的按钮，行为一致
   $('btnSurfaceBar').addEventListener('click', () => api.setSurface('toggle'))
   $('btnSurfaceConsole').addEventListener('click', () => api.setSurface('toggle'))
+  $('btnBubble').addEventListener('click', () => api.setSurface('bubble'))
   $('optAutoSurface').addEventListener('change', (e) => api.patchConfig({ autoSurface: e.target.checked }))
+
+  $('optQuickSession').addEventListener('change', (e) => {
+    api.patchConfig({ quickAsk: { session: e.target.value } })
+  })
+  $('optQuickSummary').addEventListener('change', (e) => {
+    api.patchConfig({ quickAsk: { summary: e.target.value } })
+  })
 
   $('btnAddProject').addEventListener('click', () => {
     const host = $('projects')

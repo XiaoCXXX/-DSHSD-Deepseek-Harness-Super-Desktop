@@ -92,12 +92,32 @@ function ensureWhale() {
   log(`已复制插件 ${WHALE_NAME} v${version}（来源：${source}）`)
 }
 
+/**
+ * 随仓库自带的插件（不是第三方，源码就在 plugins/ 下）。
+ * 这类插件每次构建都整份覆盖——它是我们自己的代码，不存在「用户装过更新版」的问题。
+ */
+function ensureOwnPlugins() {
+  const sourceRoot = path.join(ROOT, 'plugins')
+  if (!fs.existsSync(sourceRoot)) return
+  for (const entry of fs.readdirSync(sourceRoot, { withFileTypes: true })) {
+    if (!entry.isDirectory()) continue
+    const from = path.join(sourceRoot, entry.name)
+    const to = path.join(VENDOR_PLUGINS, entry.name)
+    fs.mkdirSync(VENDOR_PLUGINS, { recursive: true })
+    fs.rmSync(to, { recursive: true, force: true })
+    fs.cpSync(from, to, { recursive: true })
+    const version = JSON.parse(fs.readFileSync(path.join(to, 'package.json'), 'utf8')).version
+    log(`已复制自带插件 ${entry.name} v${version}`)
+  }
+}
+
 try {
   ensureDsh()
   // 桌面客户端的 DSH 跑在 Electron（无控制台的 GUI 进程）里，不补这个标志的话
   // 每条 shell 命令都会弹出一个可见的控制台窗口。
   patchDshRoot(VENDOR_DSH, log)
   ensureWhale()
+  ensureOwnPlugins()
   log('物料准备完成')
 } catch (error) {
   console.error(`[stage] 失败：${error.message}`)
