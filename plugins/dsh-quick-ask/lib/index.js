@@ -86,6 +86,11 @@ function turnFailure(reason) {
 function apply(ctx) {
   /** sessionId -> watch。同一会话同时只允许一个在等的提问。 */
   const watches = new Map()
+  /**
+   * sessionId -> { turn }：标着「这一轮不要推理」的会话。
+   * turn 为 null 表示还没从 turn/start 认出是哪一轮。
+   */
+  const fastTurns = new Map()
   /** 最近出现过事件的普通会话，作为「当前活跃会话」的优先候选。 */
   let lastActiveSessionId = null
   /** 专用会话 id，建一次就复用。 */
@@ -95,6 +100,32 @@ function apply(ctx) {
     if (res.writableEnded) return
     res.write(`event: ${type}\ndata: ${JSON.stringify(payload)}\n\n`)
   }
+
+  // ---------------------------------------------------------------- 无推理档位
+
+  // 悬浮窗的要求是「越快越好」，所以快速提问那一轮一律关掉推理。
+  // DeepSeek 适配器里 reasoningEffort:'off' → thinking:'disabled'（见 dsh-llm-deepseek
+  // 的 resolveThinking），模型直接出答案，不再先想一遍。
+  //
+  // 为什么走 agent/request 瀑布，而不是 sessionController.selectModel：
+  //   selectModel 会顺手 agentDefaultModel.saveSelection()，把这次选择存成**部署默认**。
+  //   拿它做「只快这一轮」的临时覆盖，会把用户以后所有新会话的默认档位一起改掉。
+  //   这个瀑布只替换这一轮真正发出去的那份请求配置，会话上的持久选择一个字节都不动。
+  //   瀑布按 agent 作用域过滤，payload 里带着 agent 和 turn，正好用来认自己那一轮。
+  ctx.on('agent/request', async (payload, next) => {
+    const config = await next()
+    const sessionId = payload?.agent?.session?.id
+    if (!sessionId) return config
+    const fast = fastTurns.get(sessionId)
+    if (!fast) return config
+    // 还没认出轮次前先不设限；认出来之后只认那一轮
+    if (fast.turn !== null && payload.turn !== fast.turn) return config
+    if (config.reasoningEffort === 'off') return config
+    // 用 console 而不是 ctx.logger：日志要出现在 DSH 的 stdout 里，
+    // 客户端会把它收成 [server] 行，排查时能直接看到档位有没有被换掉。
+    console.log(`[quick-ask] turn ${payload.turn} step ${payload.step} 关闭推理（原档位 ${config.reasoningEffort ?? '默认'}）`)
+    return { ...config, reasoningEffort: 'off' }
+  })
 
   // ---------------------------------------------------------------- 会话观察
 
@@ -164,7 +195,7 @@ function apply(ctx) {
     if (!route) return null
     const controller = new AbortController()
     const timer = setTimeout(() => controller.abort(), SUMMARY_TIMEOUT_MS)
-    try {
+    const call = async (extra) => {
       const assembler = new BlockAssembler()
       for await (const chunk of ctx.llm.stream({
         provider: route.provider,
@@ -178,12 +209,9 @@ function apply(ctx) {
         })],
         system: '你在做摘要。只输出一句话，不要 Markdown、不要引号、不要解释。用回答本身的语言。',
         maxTokens: 256,
-        // purpose 是封闭联合（'compaction' | 'session-title'）；借 title 这一个
-        // 让 DeepSeek adapter 关掉 thinking——摘要不需要推理，省时省钱。
-        // 它不影响选模型，也不影响计费口径。
-        purpose: 'session-title',
         sessionId,
         signal: controller.signal,
+        ...extra,
       })) {
         assembler.push(chunk)
       }
@@ -194,6 +222,16 @@ function apply(ctx) {
         .join(' ')
         .trim()
       return text || null
+    }
+    try {
+      // 摘要同样不要推理：模型直接给一句话
+      try {
+        return await call({ reasoningEffort: 'off' })
+      } catch (error) {
+        // 换一个不认 off 的适配器时就退回默认档位，别把摘要整条丢掉
+        if (!/reasoning effort|UNSUPPORTED_REASONING_EFFORT/i.test(String(error?.message || error))) throw error
+        return await call({})
+      }
     } finally {
       clearTimeout(timer)
     }
@@ -253,11 +291,21 @@ function apply(ctx) {
       observe(event) {
         const data = event && event.data
         if (watch.phase === 'awaiting') {
+          // 用户消息把提问的 rpcId 回显在 source 上，用它认领这一轮
           if (rpcIdOf(event) !== requestId) return
           watch.phase = 'running'
-          watch.turn = data && typeof data.turn === 'number' ? data.turn : null
         }
         if (watch.phase !== 'running') return
+        // turn/start 是我们唯一能拿到轮次号的地方（user/message 的 data 就是消息本身，
+        // 没有 turn 字段）。认出来之后，无推理档位就只作用于这一轮。
+        if (event.type === 'turn/start' && data && typeof data.turn === 'number') {
+          if (watch.turn === null) {
+            watch.turn = data.turn
+            const fast = fastTurns.get(sessionId)
+            if (fast) fast.turn = data.turn
+          }
+          return
+        }
         // 认准自己那一轮，别把会话里别的 turn 算进来
         if (watch.turn !== null && data && typeof data.turn === 'number' && data.turn !== watch.turn) return
 
@@ -283,6 +331,7 @@ function apply(ctx) {
         watch.phase = 'done'
         clearTimeout(watch.timer)
         watches.delete(sessionId)
+        fastTurns.delete(sessionId)
 
         const answer = watch.answer
         let summary = ''
@@ -304,6 +353,7 @@ function apply(ctx) {
         watch.phase = 'done'
         clearTimeout(watch.timer)
         watches.delete(sessionId)
+        fastTurns.delete(sessionId)
         emit(res, 'error', { message: error?.message || String(error) })
         res.end()
         settle()
@@ -311,6 +361,8 @@ function apply(ctx) {
     }
 
     watches.set(sessionId, watch)
+    // 这一轮不要推理：先标记，轮次号从 turn/start 认出来后再收窄
+    fastTurns.set(sessionId, { turn: null })
     watch.timer = setTimeout(() => watch.fail(new Error('回答超时')), ANSWER_TIMEOUT_MS)
     // rpcId 回显的字段名不是公开契约。等 5 秒还没配上，就按「下一条 assistant/message」算，
     // 免得因为字段改名而永远挂在这里。
@@ -324,6 +376,7 @@ function apply(ctx) {
         clearTimeout(watch.timer)
         clearTimeout(grace)
         watches.delete(sessionId)
+        fastTurns.delete(sessionId)
         watch.phase = 'done'
         settle()
       }
