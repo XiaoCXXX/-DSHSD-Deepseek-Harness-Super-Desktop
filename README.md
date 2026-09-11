@@ -70,16 +70,54 @@ Double-clicking an empty part of the bar also toggles it; press `Esc` to collaps
 View switches, section expand/collapse and button presses are all animated; switching themes fades
 colors smoothly. Animations are disabled automatically when the system asks for reduced motion.
 
-### Two view modes, switched manually
+### Three view modes, switched manually
 
-The client has two modes: **floating bar + DSH UI** (`bar`) and **full-window client console** (`console`).
+The client has three modes: **floating bar + DSH UI** (`bar`), **full-window client console** (`console`),
+and **portable floating window** (`bubble`).
 
 By default you switch **manually**: the `▣` button in the bar opens the console, and
 **Back to DSH** in the console header returns. Your choice is remembered across restarts.
+The `❐` button enters the portable floating window.
 
 To let the mode follow the service instead (console when stopped, bar when running), enable
 **Settings → Switch the view automatically with the service**. Clicking the manual switch turns that
 setting off implicitly — otherwise the next service state change would override your choice.
+The portable floating window can only be picked by hand: it has nothing to do with whether the service
+is running, so there is nothing to derive it from.
+
+### Portable floating window (quick ask)
+
+In this mode the whole client is just two things: the **floating console** and a **typeable bubble**.
+
+- A frameless, always-on-top, 380×540 window; the header strip is the drag handle.
+- Ask a question in the bubble. The answer streams into the bubble while it runs, and when the turn
+  ends the full text is condensed to **one sentence**.
+- **View full answer** switches back to the window that shows the DSH UI — the full reply is right
+  there in the conversation.
+- `✕` hides the floating window (it does not quit the client); `⤢` jumps to the DSH UI.
+
+Two settings under **Settings → Portable floating window**:
+
+| Setting | Values | Meaning |
+|---|---|---|
+| Which session quick ask uses | active session / dedicated session | Active reuses the conversation you are in, so the full answer is already on screen. Dedicated opens a separate `快速提问 / Quick ask` session and leaves your conversations alone. |
+| How the short answer is produced | model / truncate | Model makes a second, small LLM call (same route as the answer, thinking disabled) asking for one sentence. Truncate just cuts the full answer — used automatically when the model call fails. |
+
+#### How quick ask is wired
+
+The client does **not** speak DSH's internal RPC. Instead the installer ships a second small DSH plugin,
+[`plugins/dsh-quick-ask`](plugins/dsh-quick-ask), which runs inside the DSH process and exposes one
+ordinary SSE route:
+
+```
+GET /dsh-quick/ask?id=…&q=…&session=active|dedicated&summary=model|truncate
+    → text/event-stream: answer / summary / done / error
+```
+
+Inside DSH it uses `ctx.sessionController` to create/resume a session and admit the prompt,
+`ctx.on('session/event')` to watch that exact turn (matched by the prompt's `requestId`), and
+`ctx.llm.stream()` for the one-sentence summary. That summary call writes nothing into any session
+log, so quick asking never pollutes a conversation.
 
 ### UI language
 
