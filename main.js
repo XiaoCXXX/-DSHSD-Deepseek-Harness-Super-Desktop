@@ -44,8 +44,10 @@ const WHALE_SPEC = 'github:MeteorNOX/DeepSeek-Balance-Whale-Widget'
 const WHALE_NAME = 'dsh-whale-widget'
 /** 快速提问后端，便携悬浮窗靠它拿回答。源码在仓库的 plugins/ 下。 */
 const QUICK_NAME = 'dsh-quick-ask'
+/** 主题包：一次切换同时驱动 DSH 界面的 --dsw-* 令牌与客户端界面。同样在 plugins/ 下。 */
+const THEME_NAME = 'dsh-theme-pack'
 /** 随包分发、每次启动都要确保已启用的插件。 */
-const BUNDLED_PLUGINS = [WHALE_NAME, QUICK_NAME]
+const BUNDLED_PLUGINS = [WHALE_NAME, QUICK_NAME, THEME_NAME]
 const OVERLAY_MARGIN = 14
 const DEFAULT_OVERLAY_SIZE = { width: 268, height: 46 }
 

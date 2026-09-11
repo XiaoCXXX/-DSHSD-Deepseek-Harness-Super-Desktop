@@ -70,6 +70,22 @@ Double-clicking an empty part of the bar also toggles it; press `Esc` to collaps
 View switches, section expand/collapse and button presses are all animated; switching themes fades
 colors smoothly. Animations are disabled automatically when the system asks for reduced motion.
 
+### Themes
+
+Six themes — **DSH White/Blue** and **DSH Dark** (the two native ones) plus **Ice**, **Ocean**,
+**Midnight** and **High Contrast**. One switch drives both planes: this client's own `--c-*` tokens
+*and* the DSH web UI's `--dsw-*` tokens.
+
+The DSH side is handled by [`plugins/dsh-theme-pack`](plugins/dsh-theme-pack), one of the two DSH plugins
+that ship inside the installer. It serves the theme payload, injects a small applier script into the DSH
+page, and keeps the state in `$DSH_HOME/.dsh-theme.json`. The applier writes the palette as inline
+`!important` custom properties on `<html>`/`<body>` so DSH's own theme presenter cannot override it,
+and pins the base color scheme (`body[data-ds-dark-theme]`) to match the selected theme.
+
+For a **native** theme the applier clears everything it wrote and steps back entirely — otherwise the
+previous theme's `!important` variables would keep overriding DSH's own palette, which is exactly the
+bug where switching back to a native theme appeared to do nothing.
+
 ### Three view modes, switched manually
 
 The client has three modes: **floating bar + DSH UI** (`bar`), **full-window client console** (`console`),
