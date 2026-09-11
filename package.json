@@ -14,6 +14,10 @@
     "verify:build": "node tools/verify-build.js",
     "verify:ui": "node tools/verify.js",
     "verify:lifecycle": "node tools/verify-lifecycle.js",
+    "verify:config": "node tools/verify-config.js",
+    "verify:theme": "node tools/verify-dsh-theme.js",
+    "verify:matrix": "node tools/verify-matrix.js",
+    "verify:quick": "node tools/verify-quick-ask.js",
     "icon": "node tools/run-electron.js tools/make-icon.js",
     "preview": "node tools/run-electron.js tools/preview-overlay.js"
   },

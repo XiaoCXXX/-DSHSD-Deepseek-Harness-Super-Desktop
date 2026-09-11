@@ -1064,6 +1064,12 @@ app.on('second-instance', () => openUi())
 app.whenReady().then(async () => {
   config = new Config(app.getPath('userData'))
   logger = new Logger(path.join(app.getPath('logs'), 'dsh-client.log'))
+  // 把规范化后的配置写回文件：老配置里的非法/缺失字段就地纠正，
+  // 免得「设置界面显示的值」和「实际生效的值」长期不一致。
+  const normalized = config.normalize()
+  if (normalized.changed && normalized.reason === 'normalized') {
+    logger.info(tr('log.configNormalized'))
+  }
   server = new ServerManager({ logger, tr })
   syncThemeToDsh(config.all().theme)
   // 让 DSH 的界面语言与客户端保持一致（写 settings.yaml，DSH 监听该文件即时生效）
