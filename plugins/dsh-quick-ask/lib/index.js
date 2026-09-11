@@ -36,7 +36,7 @@ const ANSWER_TIMEOUT_MS = 10 * 60 * 1000
 /** 专用会话的标题，方便用户在 DSH 侧边栏里认出来。 */
 const DEDICATED_TITLE = '快速提问 / Quick ask'
 
-/** 插件自己的小状态文件：目前只记专用会话 id，用来跨重启复用同一个会话。 */
+/** 记住专用会话 id 的小状态文件，用于跨重启把快速提问集中到同一个会话。 */
 function stateFile() {
   const home = process.env.DSH_HOME || path.join(os.homedir(), '.dsh')
   return path.join(home, '.dsh-quick-ask.json')
@@ -56,7 +56,9 @@ function writeState(patch) {
     const file = stateFile()
     fs.mkdirSync(path.dirname(file), { recursive: true })
     fs.writeFileSync(file, `${JSON.stringify({ ...readState(), ...patch }, null, 2)}\n`, 'utf8')
-  } catch { /* 记不住就退回每次新建，不影响提问本身 */ }
+  } catch (error) {
+    console.log(`[quick-ask] 专用会话 id 记不下来：${error?.message || error}`)
+  }
 }
 
 /** 把一段文本压到 TRUNCATE_CHARS 以内，尽量断在句子边界。 */
@@ -189,20 +191,42 @@ function apply(ctx) {
   }
 
   /**
-   * 专用会话。**只在进程内复用**：每次 DSH 启动会新建一个「快速提问」会话。
+   * 专用会话。要求是「所有快速提问集中在一个会话里」，所以必须跨重启复用。
    *
-   * 试过把 id 记到 $DSH_HOME 里跨重启复用（见 readState/writeState），两种写法都在
-   * 无凭据的沙箱里挂死——直接 prompt 旧 id、或先 create({sessionId}) 收养再 prompt，
-   * 之后都不会产生任何 turn 事件，请求一直等到超时。新建会话的失败是干净的，
-   * 所以先退回这个已证实可用的行为；跨重启复用等有真实 key 的环境再验。
+   * 做法：id 记在 $DSH_HOME/.dsh-quick-ask.json，下次启动先用 `list()` 做一次**冷读**
+   * 确认它还在（不激活 Agent、不消耗任何东西），在就直接交给 prompt；不在就新建。
+   *
+   * 两个踩过的坑，记在这里免得重犯：
+   *   1. `list()` 返回的 SessionSummary **没有 title 字段**，只有 `projections?` 那个
+   *      可能缺失的缓存提示。所以不能靠标题认自己的会话，得靠记下来的 id。
+   *   2. 不要先 `create({sessionId})` 去「收养」旧会话——收养本身会成功，但之后
+   *      prompt 进去那一轮永远不产生任何事件。恢复会话是 prompt 自己的职责。
    */
   async function dedicatedSession() {
     if (dedicatedSessionId) return dedicatedSessionId
+
+    const saved = readState().dedicatedSessionId
+    if (saved) {
+      try {
+        const { items } = await ctx.sessionController.list({}, AbortSignal.timeout(5000))
+        if (items.some((row) => row.sessionId === saved)) {
+          dedicatedSessionId = saved
+          console.log(`[quick-ask] 复用专用会话 ${saved}`)
+          return dedicatedSessionId
+        }
+        console.log(`[quick-ask] 记录的专用会话 ${saved} 已不在，改为新建`)
+      } catch (error) {
+        console.log(`[quick-ask] 列会话失败，改为新建专用会话：${error?.message || error}`)
+      }
+    }
+
     const created = await ctx.sessionController.create({ cwd: process.cwd() })
     dedicatedSessionId = created.sessionId
+    writeState({ dedicatedSessionId })
     try {
       await ctx.sessionController.rename({ sessionId: dedicatedSessionId, title: DEDICATED_TITLE })
     } catch { /* 标题是锦上添花 */ }
+    console.log(`[quick-ask] 新建专用会话 ${dedicatedSessionId}`)
     return dedicatedSessionId
   }
 
