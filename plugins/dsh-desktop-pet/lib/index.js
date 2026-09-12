@@ -1,4 +1,4 @@
-﻿import fs from 'node:fs'
+import fs from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
@@ -1250,17 +1250,25 @@ function positionMenu() {
 
 var hitCanvas = null
 var hitReady = false
+// 命中测试的画布尺寸 = **素材的真实像素尺寸**，在图片加载后才知道。
+// 原来是硬编码的 610×610（旧素材正好是正方形），换形象后素材变成 911×1024，
+// 再按 610×610 拉伸就会让命中区域整体错位——表现是「点宠物点不中」，
+// 比如第一次能弹余额、之后怎么点都没反应。
+var hitW = 0
+var hitH = 0
 function setupHitTest() {
   try {
     hitCanvas = document.createElement('canvas')
-    hitCanvas.width = 610
-    hitCanvas.height = 610
     var probe = new Image()
     probe.onload = function () {
       try {
-        // 拉伸到 610×610 与 isWhaleHit 的坐标映射对齐；不指定尺寸会按原图大小绘制，
-        // 回退到非 610×610 素材（如 DSniang02.png）时命中区域会错位
-        hitCanvas.getContext('2d').drawImage(probe, 0, 0, 610, 610)
+        // 用素材自身的尺寸建画布，并按原尺寸绘制——不缩放，命中映射才和显示一致
+        hitW = probe.naturalWidth || probe.width
+        hitH = probe.naturalHeight || probe.height
+        if (!hitW || !hitH) return
+        hitCanvas.width = hitW
+        hitCanvas.height = hitH
+        hitCanvas.getContext('2d').drawImage(probe, 0, 0)
         hitReady = true
       } catch (err) {}
     }
@@ -1269,14 +1277,16 @@ function setupHitTest() {
   } catch (err) {}
 }
 function isWhaleHit(e) {
-  if (!hitCanvas || !hitReady) return true
+  if (!hitCanvas || !hitReady || !hitW || !hitH) return true
   try {
     var r = img.getBoundingClientRect()
     if (!r || r.width <= 0 || r.height <= 0) return false
-    var lx = (e.clientX - r.left) / r.width * 610
-    var ly = (e.clientY - r.top) / r.height * 610
-    if (lx < 0 || ly < 0 || lx >= 610 || ly >= 610) return false
-    if (state.h === 'left') lx = 610 - lx
+    // 显示区域 → 素材像素：宽的按宽比、高的按高比，和 drawImage 的原尺寸绘制一致
+    var lx = (e.clientX - r.left) / r.width * hitW
+    var ly = (e.clientY - r.top) / r.height * hitH
+    if (lx < 0 || ly < 0 || lx >= hitW || ly >= hitH) return false
+    // 左右翻转时，x 也要跟着镜像
+    if (state.h === 'left') lx = hitW - lx
     var data = hitCanvas.getContext('2d').getImageData(Math.floor(lx), Math.floor(ly), 1, 1).data
     return data[3] > 10
   } catch (err) {
