@@ -63,6 +63,9 @@ const VENDOR_PLUGINS = path.join(ROOT, 'vendor', 'plugins')
 const extraResources = [
   ...resourceEntries(VENDOR_DSH, 'dsh'),
   ...resourceEntries(VENDOR_PLUGINS, 'plugins'),
+  // 图标也要进 resources：主进程在运行时要读它来设置窗口/托盘图标
+  // （打包后的 exe 内嵌图标由 build.win.icon 处理，但运行时 API 需要一个文件路径）。
+  { from: path.join(ROOT, 'assets', 'icon.ico'), to: 'icon.ico' },
 ]
 
 console.log(`[electron-builder] extraResources 条目数：${extraResources.length}`)

@@ -1,4 +1,4 @@
-'use strict'
+﻿'use strict'
 
 // DSH 桌面客户端 —— Electron 主进程。
 //
@@ -124,17 +124,32 @@ function uiUrl(port, token) {
     : `http://127.0.0.1:${port}/`
 }
 
-function whaleIcon() {
-  const assets = findWhaleAssets()
-  if (assets) {
-    const image = nativeImage.createFromPath(path.join(assets, 'DSniang1.png'))
-    if (!image.isEmpty()) return image
+/**
+ * 窗口 / 托盘 / 快捷方式用的图标。
+ *
+ * 来源是构建期由 tools/make-icon.js 生成的多尺寸 icon.ico（形象 + 牌子上的 DSHSD）。
+ * 这里刻意不再从插件素材目录找 PNG —— 旧实现找的是 `DSniang1.png`，
+ * 那个文件随形象更新已被删除，于是 `createFromPath` 返回空图、窗口和托盘都没有图标。
+ *
+ * 打包后图标在 resources 下；开发期在仓库 assets/ 下。
+ */
+function appIcon() {
+  const candidates = [
+    process.resourcesPath ? path.join(process.resourcesPath, 'icon.ico') : undefined,
+    path.join(path.dirname(process.execPath), 'resources', 'icon.ico'),
+    path.join(__dirname, 'assets', 'icon.ico'),
+  ].filter(Boolean)
+  for (const file of candidates) {
+    try {
+      const image = nativeImage.createFromPath(file)
+      if (!image.isEmpty()) return image
+    } catch { /* 试下一个 */ }
   }
   return nativeImage.createEmpty()
 }
 
 function trayImage() {
-  const image = whaleIcon()
+  const image = appIcon()
   return image.isEmpty() ? image : image.resize({ width: 18, height: 18, quality: 'best' })
 }
 
@@ -476,7 +491,7 @@ function createWindow() {
     minHeight: 600,
     show: false,
     title: 'DSH',
-    icon: whaleIcon(),
+    icon: appIcon(),
     backgroundColor: '#12131a',
     webPreferences: { contextIsolation: true, nodeIntegration: false },
   })
@@ -573,7 +588,7 @@ function createBubbleWindow() {
     skipTaskbar: true,
     alwaysOnTop: true,
     title: 'DSH',
-    icon: whaleIcon(),
+    icon: appIcon(),
     webPreferences: {
       preload: path.join(__dirname, 'preload.js'),
       contextIsolation: true,
