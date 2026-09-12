@@ -1,4 +1,4 @@
-import fs from 'node:fs'
+﻿import fs from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
@@ -198,21 +198,58 @@ var css = [
   // 长句：允许换行，最多三行（多出来的被 .dshwv-text 的 overflow:hidden 裁掉）
   '.dshwv-wrap{white-space:normal;max-width:100%;line-height:1.2}',
   '.dshwv-hint{font-size:calc(var(--dshw-bw) * 0.095);color:#93a6cc;letter-spacing:.02em;margin-top:calc(var(--dshw-bw) * 0.02);line-height:1.15}',
-  '.dshwv-menu-btn{position:absolute;top:calc(40.55% + 4px);right:4px;width:26px;height:26px;border:none;border-radius:6px;background:rgba(32,49,112,.85);cursor:pointer;pointer-events:auto;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px;padding:0;z-index:2;opacity:0;transition:opacity .15s ease}',
-  '.dshwv-menu-btn.dshwv-menu-btn-visible{opacity:1}',
-  '.dshwv-menu-btn span{display:block;width:14px;height:2px;background:#fff;border-radius:1px}',
-  '.dshwv-menu-btn:hover{background:#203170}',
-  '.dshwv-menu{position:fixed;min-width:196px;background:rgba(255,255,255,.92);border:1px solid rgba(32,49,112,.35);border-radius:10px;padding:10px 12px;opacity:0;transform:scale(.92) translateY(-4px);transform-origin:top right;transition:opacity .18s ease,transform .2s cubic-bezier(.34,1.56,.64,1);pointer-events:none;z-index:10000;box-shadow:0 6px 18px rgba(0,0,0,.18);color-scheme:light}',
-  '.dshwv-menu.dshwv-menu-open{opacity:1;transform:scale(1) translateY(0);pointer-events:auto}',
-  '.dshwv-menu-row{display:flex;align-items:center;gap:8px;margin:5px 0;color:#203170;font-size:12px;white-space:nowrap}',
-  '.dshwv-range{flex:1;min-width:0;accent-color:#203170}',
-  '.dshwv-number{width:44px;border:1px solid rgba(32,49,112,.4);border-radius:6px;padding:2px 4px;font-size:12px;color:#203170;background:#fff;box-sizing:border-box}',
-  '.dshwv-number:disabled{opacity:.4;background:rgba(32,49,112,.06);cursor:not-allowed}',
-  '.dshwv-sound{flex:1;border:1px solid rgba(32,49,112,.4);border-radius:6px;background:rgba(32,49,112,.08);color:#203170;font-size:12px;padding:3px 0;cursor:pointer}',
-  '.dshwv-sound:hover{background:rgba(32,49,112,.16)}',
-  '.dshwv-check{width:16px;height:16px;accent-color:#203170;cursor:pointer;flex:0 0 auto}',
-  '.dshwv-menu-sep{height:1px;background:rgba(32,49,112,.25);margin:6px 0}',
-  '.dshwv-volpct{width:44px;text-align:right;color:#203170;font-size:12px}'
+  // ---- 设置面板（自己重做的版本，不是上游那套竖排弹层）----
+  //
+  // 结构：齿轮按钮 → 分组的卡片面板。
+  // 分组的意义：9 个配置项平铺成一列很难找，按「外观 / 声音 / 用量 / 行为」分开后
+  // 一眼能定位。每组是一张卡，组内有标题。
+  //
+  // **主题适配**——这是关键：
+  //   dsh-theme-pack 会把 DSH 的 --dsw-* 令牌写成 inline + !important，
+  //   所以只要面板的每一处颜色都走 --dsw-*，它就会自动跟着 6 套主题变。
+  //   为此新增两个局部派生变量，避免到处写 rgba 硬编码：
+  //     --dshw-fg  文字/描边基色（跟随主题正文色）
+  //     --dshw-ui  控件底色（用 color-mix 从正文色调出一个极淡的底，
+  //                这样暗色主题下是「浅色叠在深色上」，不会白得刺眼）
+  //   每个令牌都带兜底值：万一宿主没装主题包（比如别处复用这个插件），
+  //   回落到原来的蓝白配色，不会花掉。
+  '.dshwv-gear{position:absolute;top:calc(40.55% + 6px);right:6px;width:26px;height:26px;border:none;border-radius:50%;background:#2f5bd7;color:#fff;cursor:pointer;pointer-events:auto;display:flex;align-items:center;justify-content:center;padding:0;z-index:2;opacity:0;transform:scale(.85);transition:opacity .16s ease,transform .18s cubic-bezier(.34,1.56,.64,1),background-color .16s ease}',
+  '.dshwv-gear.dshwv-gear-visible{opacity:1;transform:scale(1)}',
+  '.dshwv-gear:hover{filter:brightness(1.12)}',
+  '.dshwv-gear svg{width:15px;height:15px;display:block;pointer-events:none}',
+  '.dshwv-gear:focus-visible{outline:2px solid var(--dsw-alias-brand-primary,#2f5bd7);outline-offset:2px}',
+  // 面板本体
+  '.dshwv-panel{--dshw-fg:var(--dsw-alias-text-primary,#203170);--dshw-ui:color-mix(in srgb,var(--dsw-alias-text-primary,#203170) 7%,transparent);--dshw-line:color-mix(in srgb,var(--dsw-alias-text-primary,#203170) 20%,transparent);position:fixed;width:268px;max-height:min(74vh,520px);overflow-y:auto;overscroll-behavior:contain;background:var(--dsw-alias-bg-base,#fff);color:var(--dshw-fg);border:1px solid var(--dshw-line);border-radius:14px;padding:10px;opacity:0;transform:scale(.94) translateY(-6px);transform-origin:top right;transition:opacity .16s ease,transform .2s cubic-bezier(.34,1.56,.64,1);pointer-events:none;z-index:10000;box-shadow:0 10px 32px rgba(16,26,64,.22);font-size:12px}',
+  '.dshwv-panel.dshwv-panel-open{opacity:1;transform:scale(1) translateY(0);pointer-events:auto}',
+  '.dshwv-panel::-webkit-scrollbar{width:8px}',
+  '.dshwv-panel::-webkit-scrollbar-thumb{background:var(--dshw-line);border-radius:4px}',
+  // 分组卡片
+  '.dshwv-card{background:var(--dshw-ui);border-radius:10px;padding:8px 10px;margin:0 0 8px}',
+  '.dshwv-card:last-child{margin-bottom:0}',
+  '.dshwv-card-title{font-size:11px;font-weight:700;letter-spacing:.08em;opacity:.62;margin:0 0 6px}',
+  // 每行：左标签 + 右控件
+  '.dshwv-field{display:flex;align-items:center;gap:8px;min-height:26px;margin:4px 0}',
+  '.dshwv-field-label{flex:1;min-width:0}',
+  // 有解释的行：悬停时标签下方出现虚线下划线，鼠标本身也给 help 光标
+  '.dshwv-field-label[data-hint]{cursor:help;border-bottom:1px dotted transparent}',
+  '.dshwv-field-label[data-hint]:hover{border-bottom-color:var(--dshw-line)}',
+  '.dshwv-range{flex:0 0 96px;min-width:0;accent-color:var(--dsw-alias-brand-primary,#2f5bd7)}',
+  '.dshwv-number{width:48px;border:1px solid var(--dshw-line);border-radius:7px;padding:3px 5px;font-size:12px;color:inherit;background:var(--dsw-alias-bg-base,#fff);box-sizing:border-box;text-align:right}',
+  '.dshwv-number:disabled{opacity:.4;cursor:not-allowed}',
+  '.dshwv-number:focus-visible{outline:2px solid var(--dsw-alias-brand-primary,#2f5bd7);outline-offset:0}',
+  '.dshwv-select{flex:0 0 118px;border:1px solid var(--dshw-line);border-radius:7px;background:var(--dsw-alias-bg-base,#fff);color:inherit;font-size:12px;padding:4px 6px;cursor:pointer}',
+  '.dshwv-select:hover{background:var(--dshw-ui)}',
+  '.dshwv-select:focus-visible{outline:2px solid var(--dsw-alias-brand-primary,#2f5bd7);outline-offset:0}',
+  // 自绘开关：滑道用主题的「极淡底色」，打开时用品牌色
+  '.dshwv-switch{flex:0 0 auto;position:relative;width:34px;height:19px;border-radius:10px;background:var(--dshw-line);cursor:pointer;transition:background-color .18s ease;border:none;padding:0}',
+  '.dshwv-switch::after{content:"";position:absolute;top:2px;left:2px;width:15px;height:15px;border-radius:50%;background:#fff;box-shadow:0 1px 3px rgba(0,0,0,.25);transition:transform .18s cubic-bezier(.34,1.4,.5,1)}',
+  '.dshwv-switch[aria-checked="true"]{background:var(--dsw-alias-brand-primary,#2f5bd7)}',
+  '.dshwv-switch[aria-checked="true"]::after{transform:translateX(15px)}',
+  '.dshwv-switch:disabled{opacity:.4;cursor:not-allowed}',
+  '.dshwv-switch:focus-visible{outline:2px solid var(--dsw-alias-brand-primary,#2f5bd7);outline-offset:2px}',
+  '.dshwv-num-suffix{opacity:.55;flex:0 0 auto}',
+  '.dshwv-volpct{flex:0 0 34px;text-align:right;opacity:.7;font-variant-numeric:tabular-nums}',
+  '@media (prefers-reduced-motion:reduce){.dshwv-panel,.dshwv-gear,.dshwv-switch::after{transition:none!important}}'
 ].join('\\n')
 
 var styleEl = document.createElement('style')
@@ -228,24 +265,100 @@ img.src = IMG_URL
 img.alt = 'DeepSeek 余额'
 img.draggable = false
 
-var menuBtn = document.createElement('button')
-menuBtn.type = 'button'
-menuBtn.className = 'dshwv-menu-btn'
-menuBtn.title = '菜单'
-menuBtn.innerHTML = '<span></span><span></span><span></span>'
-menuBtn.addEventListener('click', function (e) { e.stopPropagation(); toggleMenu() })
+var gearBtn = document.createElement('button')
+gearBtn.type = 'button'
+gearBtn.className = 'dshwv-gear'
+gearBtn.title = '设置'
+// 齿轮图标：内联 SVG，不依赖任何图标字体/外链
+gearBtn.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">' +
+  '<circle cx="12" cy="12" r="3.2"/>' +
+  '<path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.6 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.6a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9v0a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/>' +
+  '</svg>'
+gearBtn.addEventListener('click', function (e) { e.stopPropagation(); toggleMenu() })
 
 var menuBox = document.createElement('div')
-menuBox.className = 'dshwv-menu'
-function menuLabel(text) {
+menuBox.className = 'dshwv-panel'
+menuBox.setAttribute('role', 'dialog')
+
+/** 建一张分组卡片；title 是组标题。返回卡片元素，往里塞 field。 */
+function menuCard(title) {
+  var card = document.createElement('div')
+  card.className = 'dshwv-card'
+  var head = document.createElement('div')
+  head.className = 'dshwv-card-title'
+  head.textContent = title
+  card.appendChild(head)
+  return card
+}
+/** 一行：左标签（可带悬停解释）+ 右侧控件们。 */
+function menuField(label, hint) {
+  var row = document.createElement('div')
+  row.className = 'dshwv-field'
+  var text = document.createElement('span')
+  text.className = 'dshwv-field-label'
+  text.textContent = label
+  if (hint) { text.dataset.hint = '1'; text.title = hint }
+  row.appendChild(text)
+  return row
+}
+/**
+ * 自绘开关。用 <button aria-checked> 而不是 checkbox：
+ * 一是能做得跟整体视觉一致，二是点击区域更大（原生 checkbox 只有 16px）。
+ */
+function menuSwitch(initial, onChange, hint) {
+  var btn = document.createElement('button')
+  btn.type = 'button'
+  btn.className = 'dshwv-switch'
+  btn.setAttribute('role', 'switch')
+  btn.setAttribute('aria-checked', initial ? 'true' : 'false')
+  if (hint) btn.title = hint
+  btn.addEventListener('click', function (e) {
+    e.stopPropagation()
+    var next = btn.getAttribute('aria-checked') !== 'true'
+    btn.setAttribute('aria-checked', next ? 'true' : 'false')
+    onChange(next)
+  })
+  return btn
+}
+/** 下拉框。 */
+function menuSelect(options, onChange) {
+  var sel = document.createElement('select')
+  sel.className = 'dshwv-select'
+  for (var i = 0; i < options.length; i++) {
+    var o = document.createElement('option')
+    o.value = options[i][0]
+    o.textContent = options[i][1]
+    sel.appendChild(o)
+  }
+  sel.addEventListener('change', function () { onChange(sel.value) })
+  return sel
+}
+/** 数字输入。 */
+function menuNumber(initial, onChange, extra) {
+  var input = document.createElement('input')
+  input.type = 'number'
+  input.min = '0'
+  input.step = '1'
+  input.className = 'dshwv-number'
+  input.value = String(initial)
+  if (extra) { for (var k in extra) input[k] = extra[k] }
+  var fire = function () { onChange(input.value) }
+  input.addEventListener('input', fire)
+  input.addEventListener('change', fire)
+  return input
+}
+/** 把自绘开关设成指定状态（恢复配置时用；不能写 .checked，它没有那个属性）。 */
+function setSwitch(el, on) {
+  if (!el) return
+  el.setAttribute('aria-checked', on ? 'true' : 'false')
+}
+
+/** 小字后缀（「秒」「px」这类单位）。 */
+function menuSuffix(text) {
   var s = document.createElement('span')
+  s.className = 'dshwv-num-suffix'
   s.textContent = text
   return s
-}
-function menuRow() {
-  var r = document.createElement('div')
-  r.className = 'dshwv-menu-row'
-  return r
 }
 var scaleInput = document.createElement('input')
 scaleInput.type = 'range'
@@ -278,7 +391,7 @@ scaleNumber.addEventListener('change', function () {
   root.style.transition = ''
 })
 var soundSelect = document.createElement('select')
-soundSelect.className = 'dshwv-sound'
+soundSelect.className = 'dshwv-select'
 function soundOpt(value, label) {
   var o = document.createElement('option')
   o.value = value
@@ -289,28 +402,21 @@ soundSelect.appendChild(soundOpt('duck', '小黄鸭'))
 soundSelect.appendChild(soundOpt('fx1', '音效1'))
 soundSelect.addEventListener('change', function () { setSoundSet(soundSelect.value) })
 var usageSelect = document.createElement('select')
-usageSelect.className = 'dshwv-sound'
+usageSelect.className = 'dshwv-select'
 usageSelect.appendChild(soundOpt('ledger', '小鲸鱼记账 (推荐)'))
 usageSelect.appendChild(soundOpt('token', '实时·令牌 (用法：去问dsh)'))
 usageSelect.addEventListener('change', function () { setUsageMode(usageSelect.value) })
 var peakSelect = document.createElement('select')
-peakSelect.className = 'dshwv-sound'
+peakSelect.className = 'dshwv-select'
 peakSelect.appendChild(soundOpt('default', '默认'))
 peakSelect.appendChild(soundOpt('liangwen', '梁文峰谷'))
 peakSelect.appendChild(soundOpt('qiangqiang', '!?强强?!'))
 peakSelect.addEventListener('change', function () { setPeakMode(peakSelect.value) })
-var bubbleToggle = document.createElement('input')
-bubbleToggle.type = 'checkbox'
-bubbleToggle.className = 'dshwv-check'
-bubbleToggle.checked = true
-bubbleToggle.title = '开启/关闭思考气泡'
-bubbleToggle.addEventListener('change', function () { setBubbleOn(bubbleToggle.checked) })
-var turnCostToggle = document.createElement('input')
-turnCostToggle.type = 'checkbox'
-turnCostToggle.className = 'dshwv-check'
-turnCostToggle.checked = true
-turnCostToggle.title = '每轮对话结束后自动显示本轮消耗金额'
-turnCostToggle.addEventListener('change', function () { setTurnCostOn(turnCostToggle.checked) })
+// 三个开关用自绘的 menuSwitch（不是 <input type=checkbox>）：
+// 视觉和卡片一致，点击区域从 16px 提到 34×19，键盘也能 Tab 到。
+// 这里定义的是「UI 控件」，状态同步在下面的 setBubbleOn/setTurnCostOn/… 里。
+var bubbleToggle = menuSwitch(true, function (next) { setBubbleOn(next) }, '开启/关闭思考气泡')
+var turnCostToggle = menuSwitch(true, function (next) { setTurnCostOn(next) }, '每轮对话结束后自动显示本轮消耗金额')
 var turnCostCloseInput = document.createElement('input')
 turnCostCloseInput.type = 'number'
 turnCostCloseInput.min = '0'
@@ -321,12 +427,7 @@ turnCostCloseInput.disabled = false // 跟随「每轮消耗提示」开关
 turnCostCloseInput.title = '填 0 表示不自动关闭，需手动点击关闭'
 turnCostCloseInput.addEventListener('input', function () { setTurnCostClose(turnCostCloseInput.value) })
 turnCostCloseInput.addEventListener('change', function () { setTurnCostClose(turnCostCloseInput.value) })
-var scrollGapToggle = document.createElement('input')
-scrollGapToggle.type = 'checkbox'
-scrollGapToggle.className = 'dshwv-check'
-scrollGapToggle.checked = false
-scrollGapToggle.title = '开启后挂件右侧按设定像素避开滚动条；关闭则贴边（盖住滚动条）'
-scrollGapToggle.addEventListener('change', function () { setScrollGapOn(scrollGapToggle.checked) })
+var scrollGapToggle = menuSwitch(false, function (next) { setScrollGapOn(next) }, '开启后挂件右侧按设定像素避开滚动条；关闭则贴边（盖住滚动条）')
 var scrollGapInput = document.createElement('input')
 scrollGapInput.type = 'number'
 scrollGapInput.min = '0'
@@ -337,13 +438,44 @@ scrollGapInput.disabled = true // 默认避让关 → 宽度不可修改，勾�
 scrollGapInput.title = '避让滚动条的像素宽度，填 0 表示贴边'
 scrollGapInput.addEventListener('input', function () { setScrollGapPx(scrollGapInput.value) })
 scrollGapInput.addEventListener('change', function () { setScrollGapPx(scrollGapInput.value) })
-var row1 = menuRow()
-row1.appendChild(menuLabel('大小'))
-row1.appendChild(scaleInput)
-row1.appendChild(scaleNumber)
-var row2 = menuRow()
-row2.appendChild(menuLabel('音效'))
-row2.appendChild(soundSelect)
+// ---- 面板内容：按用途分成四张卡片 ----
+//
+// 分组依据是「用户想调什么」，不是「控件类型」：
+//   外观   —— 大小、气泡
+//   声音   —— 音效、音量
+//   用量   —— 计量方式、峰谷计价、每轮消耗提示
+//   行为   —— 贴边避让
+// 每张卡里的标签都带一句悬停解释（原来是 title 挂在控件上，鼠标得正好停在控件上才看得到）。
+var cardLook = menuCard('外观')
+cardLook.appendChild(withField(menuField('大小', '调整挂件整体尺寸；右侧数字是 1-20 档'), scaleInput, scaleNumber))
+cardLook.appendChild(withField(menuField('思考气泡', '点击挂件时是否弹出余额/台词气泡'), bubbleToggle))
+
+var cardSound = menuCard('声音')
+cardSound.appendChild(withField(menuField('音效', '点击挂件时的提示音'), soundSelect))
+cardSound.appendChild(withField(menuField('音量', '拖动调节，0 为静音'), volInput, volPct))
+
+var cardUsage = menuCard('用量')
+cardUsage.appendChild(withField(menuField('计量方式', '记在本轮消耗里怎么算'), usageSelect))
+cardUsage.appendChild(withField(menuField('峰谷计价', '按时段切换文案风格'), peakSelect))
+cardUsage.appendChild(withField(menuField('每轮消耗提示', '一轮对话结束后自动弹出本轮花费'), turnCostToggle))
+cardUsage.appendChild(withField(menuField('自动关闭', '多少秒后自动收起；填 0 表示不自动关'), turnCostCloseInput, menuSuffix('秒')))
+
+var cardBehavior = menuCard('行为')
+cardBehavior.appendChild(withField(menuField('避让滚动条', '开启后挂件右侧留出空隙，不盖住滚动条'), scrollGapToggle))
+cardBehavior.appendChild(withField(menuField('避让宽度', '留出的像素数；填 0 表示贴边'), scrollGapInput, menuSuffix('px')))
+
+menuBox.appendChild(cardLook)
+menuBox.appendChild(cardSound)
+menuBox.appendChild(cardUsage)
+menuBox.appendChild(cardBehavior)
+
+/** 把控件们塞进一行。 */
+function withField(row, /* ...controls */) {
+  for (var i = 1; i < arguments.length; i++) {
+    if (arguments[i]) row.appendChild(arguments[i])
+  }
+  return row
+}
 var volInput = document.createElement('input')
 volInput.type = 'range'
 volInput.min = '0'
@@ -355,42 +487,6 @@ var volPct = document.createElement('span')
 volPct.className = 'dshwv-volpct'
 volPct.textContent = '90%'
 volInput.addEventListener('input', function () { setVol(volInput.value) })
-var row3 = menuRow()
-row3.appendChild(menuLabel('音量'))
-row3.appendChild(volInput)
-row3.appendChild(volPct)
-var row4 = menuRow()
-row4.appendChild(menuLabel('用量'))
-row4.appendChild(usageSelect)
-var row5 = menuRow()
-row5.appendChild(menuLabel('峰谷'))
-row5.appendChild(peakSelect)
-var row6 = menuRow()
-row6.appendChild(menuLabel('气泡'))
-row6.appendChild(bubbleToggle)
-var menuSep1 = document.createElement('div')
-menuSep1.className = 'dshwv-menu-sep'
-var row7 = menuRow()
-row7.appendChild(menuLabel('每轮消耗提示'))
-row7.appendChild(turnCostToggle)
-row7.appendChild(menuLabel('自动关闭'))
-row7.appendChild(turnCostCloseInput)
-row7.appendChild(menuLabel('秒'))
-var row9 = menuRow()
-row9.appendChild(menuLabel('避让滚动条'))
-row9.appendChild(scrollGapToggle)
-row9.appendChild(menuLabel('宽度'))
-row9.appendChild(scrollGapInput)
-row9.appendChild(menuLabel('px'))
-menuBox.appendChild(row1)
-menuBox.appendChild(row2)
-menuBox.appendChild(row3)
-menuBox.appendChild(row4)
-menuBox.appendChild(row5)
-menuBox.appendChild(row6)
-menuBox.appendChild(row7)
-menuBox.appendChild(menuSep1)
-menuBox.appendChild(row9)
 
 var textBox = document.createElement('div')
 textBox.className = 'dshwv-text'
@@ -442,7 +538,7 @@ body.className = 'dshwv-body'
 body.appendChild(img)
 body.appendChild(bubbleBox)
 root.appendChild(body)
-root.appendChild(menuBtn)
+root.appendChild(gearBtn)
 document.body.appendChild(root)
 document.body.appendChild(menuBox)
 
@@ -910,14 +1006,14 @@ function setPeakMode(v) {
 }
 function setBubbleOn(v) {
   bubbleOn = !!v
-  bubbleToggle.checked = bubbleOn
+  setSwitch(bubbleToggle, bubbleOn)
   saveConfig()
   // 必须走 hideCostBubble：残留的 costBubbleActive 会让 render()/showBubble() 永久早退
   if (!bubbleOn) hideCostBubble()
 }
 function setTurnCostOn(v) {
   turnCostOn = !!v
-  turnCostToggle.checked = turnCostOn
+  setSwitch(turnCostToggle, turnCostOn)
   turnCostCloseInput.disabled = !turnCostOn
   saveConfig()
   if (!turnCostOn) hideCostBubble()
@@ -931,7 +1027,7 @@ function setTurnCostClose(v) {
 }
 function setScrollGapOn(v) {
   scrollGapOn = !!v
-  scrollGapToggle.checked = scrollGapOn
+  setSwitch(scrollGapToggle, scrollGapOn)
   scrollGapInput.disabled = !scrollGapOn
   saveConfig()
   settle()
@@ -1083,12 +1179,12 @@ var menuOpen = false
 function toggleMenu() {
   menuOpen = !menuOpen
   if (menuOpen) positionMenu()
-  menuBox.classList.toggle('dshwv-menu-open', menuOpen)
-  if (menuOpen) menuBtn.classList.add('dshwv-menu-btn-visible')
+  menuBox.classList.toggle('dshwv-panel-open', menuOpen)
+  if (menuOpen) gearBtn.classList.add('dshwv-gear-visible')
 }
 function closeMenu() {
   menuOpen = false
-  menuBox.classList.remove('dshwv-menu-open')
+  menuBox.classList.remove('dshwv-panel-open')
   root.style.transition = ''
   snapCheck()
 }
@@ -1132,7 +1228,7 @@ function snapCheck() {
 function positionMenu() {
   try {
     var r = root.getBoundingClientRect()
-    var b = menuBtn.getBoundingClientRect()
+    var b = gearBtn.getBoundingClientRect()
     var vp = viewport()
     var onLeft = r.left + r.width / 2 < vp.w / 2
     // the menu appears ABOVE the button, anchored to its side:
@@ -1189,7 +1285,7 @@ function isWhaleHit(e) {
 }
 function onDocPointerDown(e) {
   if (e.target && e.target.closest) {
-    if (e.target.closest('.dshwv-bubble') || e.target.closest('.dshwv-menu') || e.target.closest('.dshwv-menu-btn')) return
+    if (e.target.closest('.dshwv-bubble') || e.target.closest('.dshwv-panel') || e.target.closest('.dshwv-gear')) return
   }
   if (menuOpen) {
     closeMenu()
@@ -1247,14 +1343,14 @@ function onDocPointerMoveCursor(e) {
   if (drag && drag.active) { setWidgetCursor('grabbing'); return }
   var el = null
   try { el = document.elementFromPoint(e.clientX, e.clientY) } catch (err) {}
-  if (el && el.closest && (el.closest('.dshwv-bubble') || el.closest('.dshwv-menu') || el.closest('.dshwv-menu-btn'))) {
+  if (el && el.closest && (el.closest('.dshwv-bubble') || el.closest('.dshwv-panel') || el.closest('.dshwv-gear'))) {
     setWidgetCursor('')
-    menuBtn.classList.add('dshwv-menu-btn-visible')
+    gearBtn.classList.add('dshwv-gear-visible')
     return
   }
   var over = isWhaleHit(e)
   setWidgetCursor(over ? 'grab' : '')
-  menuBtn.classList.toggle('dshwv-menu-btn-visible', over || menuOpen)
+  gearBtn.classList.toggle('dshwv-gear-visible', over || menuOpen)
 }
 document.addEventListener('pointermove', onDocPointerMoveCursor, true)
 
@@ -1371,11 +1467,11 @@ fetch(SIZE_URL, { cache: 'no-store' })
     }
     if (d && typeof d.bubbleOn === 'boolean') {
       bubbleOn = d.bubbleOn
-      bubbleToggle.checked = bubbleOn
+      setSwitch(bubbleToggle, bubbleOn)
     }
     if (d && typeof d.turnCostOn === 'boolean') {
       turnCostOn = d.turnCostOn
-      turnCostToggle.checked = turnCostOn
+      setSwitch(turnCostToggle, turnCostOn)
       turnCostCloseInput.disabled = !turnCostOn
     }
     if (d && typeof d.turnCostCloseMs === 'number') {
@@ -1384,7 +1480,7 @@ fetch(SIZE_URL, { cache: 'no-store' })
     }
     if (d && typeof d.scrollGapOn === 'boolean') {
       scrollGapOn = d.scrollGapOn
-      scrollGapToggle.checked = scrollGapOn
+      setSwitch(scrollGapToggle, scrollGapOn)
       scrollGapInput.disabled = !scrollGapOn
     }
     if (d && typeof d.scrollGapPx === 'number') {
