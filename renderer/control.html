@@ -12,6 +12,8 @@
   <div id="root">
     <!-- 悬浮条：收起状态就是这一条 -->
     <div class="bar" id="bar">
+      <!-- 拖动把手：按住它可以把整个悬浮栏拖到窗口任意位置（位置会记住） -->
+      <span class="drag-handle" id="dragHandle" data-i18n-title="bar.dragHint" title="按住拖动，移动悬浮栏位置">⠿</span>
       <span class="console-title" id="consoleTitle" data-i18n="app.consoleTitle">DSH 客户端控制台</span>
       <span class="console-sub" id="consoleSub" data-i18n="app.consoleSub">服务未运行 · 全部控制项已展开</span>
       <span class="dot" id="dot"></span>

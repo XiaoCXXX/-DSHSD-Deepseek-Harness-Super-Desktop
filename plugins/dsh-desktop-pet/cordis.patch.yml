@@ -1,0 +1,19 @@
+# ============================================================================
+# dsh-desktop-pet —— DSH bundle patch
+# ============================================================================
+# 把桌面宠物挂进 Web profile 的配置树。
+#
+# 桌面客户端：随安装包分发，客户端启动时自动复制到 profile 并写进 bundles，
+# 不需要手工安装。源码在仓库的 plugins/dsh-desktop-pet/。
+#
+# 手工装到别的 profile：
+#   dsh plugin --profile web add link:<本目录绝对路径>
+# 安装后重启 dsh web，再 F5 刷新浏览器。
+#
+# 来源：基于 MeteorNOX/DeepSeek-Balance-Whale-Widget（MIT）二次开发：
+#   包名、路由前缀（/dsh-whale → /dsh-pet）、形象素材、气泡与动画实现均已改。
+# ============================================================================
+
+- insert:
+    - id: dsh-desktop-pet
+      name: dsh-desktop-pet

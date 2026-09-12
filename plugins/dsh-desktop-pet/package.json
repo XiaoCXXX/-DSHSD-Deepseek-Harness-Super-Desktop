@@ -1,0 +1,30 @@
+{
+  "name": "dsh-desktop-pet",
+  "version": "0.3.0",
+  "description": "DSH 桌面宠物：右下角常驻形象，显示余额、峰谷计价、每轮对话花费，带随机台词气泡、音效与揉脸动画",
+  "keywords": [
+    "dsh",
+    "dsh-plugin",
+    "deepseek-harness",
+    "balance",
+    "pet",
+    "mascot"
+  ],
+  "type": "module",
+  "main": "lib/index.js",
+  "files": [
+    "lib",
+    "assets",
+    "cordis.patch.yml",
+    "README.md"
+  ],
+  "contributors": [
+    "MeteorNOX (https://github.com/MeteorNOX/DeepSeek-Balance-Whale-Widget) — 本项目基于其 MIT 许可的小鲸鱼挂件二次开发"
+  ],
+  "dsh": {
+    "bundle": {
+      "patch": "./cordis.patch.yml"
+    }
+  },
+  "license": "MIT"
+}

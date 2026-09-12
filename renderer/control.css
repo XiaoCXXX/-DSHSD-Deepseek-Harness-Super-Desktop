@@ -47,6 +47,28 @@ body {
   white-space: nowrap;
 }
 
+/* 拖动把手：把整个悬浮栏拖到窗口任意位置（位置记在配置里）。
+   用 grab/grabbing 光标明示可拖；拖动期间关掉过渡，否则会有跟随延迟。 */
+.drag-handle {
+  flex: none;
+  cursor: grab;
+  color: var(--c-text-mute);
+  font-size: 12px;
+  line-height: 1;
+  padding: 2px 1px;
+  letter-spacing: -1px;
+  user-select: none;
+  -webkit-user-select: none;
+  transition: color .15s ease;
+}
+.drag-handle:hover { color: var(--c-text); }
+body.dragging .drag-handle { cursor: grabbing; color: var(--c-accent); }
+/* 拖动中：面板跟随鼠标不做补间，否则会「追不上」 */
+body.dragging #root,
+body.dragging .bar { transition: none !important; }
+/* 控制台形态铺满窗口，没有位置可拖 —— 隐藏把手 */
+body[data-surface="console"] .drag-handle { display: none; }
+
 .dot {
   width: 8px;
   height: 8px;

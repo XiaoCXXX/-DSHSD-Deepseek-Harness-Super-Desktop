@@ -40,14 +40,24 @@ const { t, messagesFor, normalizeLanguage, languageEntry, LANGUAGES } = require(
 const { writeDshLanguage } = require('./lib/dsh-settings')
 
 const PARTITION = 'persist:dsh'
-const WHALE_SPEC = 'github:MeteorNOX/DeepSeek-Balance-Whale-Widget'
-const WHALE_NAME = 'dsh-whale-widget'
+/** 桌面宠物（原第三方小鲸鱼挂件的二次开发版），源码在仓库的 plugins/ 下。 */
+const PET_NAME = 'dsh-desktop-pet'
+/** 插件面板里「安装/更新/删除」的默认目标（我们自己的包，给包名即可）。 */
+const PET_SPEC = 'dsh-desktop-pet'
+/**
+ * 已经被取代的旧插件名。
+ *
+ * 0.1.4 及更早的版本随包分发的是上游的 `dsh-whale-widget`，它会把挂件挂进 profile。
+ * 改名之后如果不清理，用户升级上来会**同时加载两个挂件**（屏幕上两个小鲸鱼）。
+ * 所以每次启动都检查一遍：在 bundles 里就摘掉，并把目录删掉。
+ */
+const LEGACY_PLUGIN_NAMES = ['dsh-whale-widget']
 /** 快速提问后端，便携悬浮窗靠它拿回答。源码在仓库的 plugins/ 下。 */
 const QUICK_NAME = 'dsh-quick-ask'
 /** 主题包：一次切换同时驱动 DSH 界面的 --dsw-* 令牌与客户端界面。同样在 plugins/ 下。 */
 const THEME_NAME = 'dsh-theme-pack'
 /** 随包分发、每次启动都要确保已启用的插件。 */
-const BUNDLED_PLUGINS = [WHALE_NAME, QUICK_NAME, THEME_NAME]
+const BUNDLED_PLUGINS = [PET_NAME, QUICK_NAME, THEME_NAME]
 const OVERLAY_MARGIN = 14
 const DEFAULT_OVERLAY_SIZE = { width: 268, height: 46 }
 
@@ -164,16 +174,80 @@ function listPlugins() {
       spec: manifest.dependencies?.[name] || '随包分发',
       version: pkg?.version || null,
       bundle: Boolean(pkg?.dsh?.bundle?.patch),
-      whale: name === WHALE_NAME,
+      // 客户端界面用它把「宠物」这一项标出来（换过名的历史字段，前端仍在读）
+      whale: name === PET_NAME,
       present: Boolean(packageDir),
     }
   })
 }
 
 /** 启动服务前准备运行环境：确保 profile 存在且已启用随包插件。 */
+/**
+ * 清掉被取代的旧插件：从 profile 的 bundles 里摘掉，并删除它的目录。
+ *
+ * 为什么必须做：`dsh-whale-widget` 改名成 `dsh-desktop-pet` 之后，老用户的 profile
+ * 里仍留着旧插件且是启用状态——两个插件都往页面注入挂件，结果屏幕上出现两个小鲸鱼。
+ * 只改 bundles 不删目录也不够：bundles 是「加载清单」，但插件目录还在的话
+ * 用户手动 `dsh plugin add` 或某些回退路径仍可能把它捡回来。
+ *
+ * 只删我们**确知**是自己分发过的名字（LEGACY_PLUGIN_NAMES），不做任何模糊匹配。
+ *
+ * @param {string} dir profile 目录
+ * @returns {{removed:string[], failed:string[]}}
+ */
+function removeLegacyPlugins(dir) {
+  const removed = []
+  const failed = []
+  for (const name of LEGACY_PLUGIN_NAMES) {
+    let touched = false
+
+    // 1) 从 bundles 摘掉
+    const manifestPath = path.join(dir, 'package.json')
+    try {
+      const manifest = readJson(manifestPath)
+      const bundles = manifest?.dsh?.profile?.bundles
+      if (Array.isArray(bundles) && bundles.includes(name)) {
+        manifest.dsh.profile.bundles = bundles.filter((entry) => entry !== name)
+        // 顺手清掉 dependencies 里的声明，否则 pnpm 下次还会去装
+        if (manifest.dependencies && name in manifest.dependencies) delete manifest.dependencies[name]
+        fs.writeFileSync(manifestPath, `${JSON.stringify(manifest, null, 2)}\n`, 'utf8')
+        touched = true
+      }
+    } catch (error) {
+      failed.push(`${name}(bundles: ${error?.message || error})`)
+      continue
+    }
+
+    // 2) 删掉插件目录（只在确实存在时动手）
+    const target = path.join(dir, 'node_modules', name)
+    if (fs.existsSync(target)) {
+      try {
+        fs.rmSync(target, { recursive: true, force: true })
+        touched = true
+      } catch (error) {
+        failed.push(`${name}(目录: ${error?.message || error})`)
+        continue
+      }
+    }
+
+    if (touched) removed.push(name)
+  }
+  return { removed, failed }
+}
+
 function prepareEnvironment() {
   const dir = profileDir(dshHome())
   const runtime = resolveRuntime()
+
+  // 先清旧的，再装新的：这样即使清理失败也不会把新插件顶掉
+  const legacy = removeLegacyPlugins(dir)
+  if (legacy.removed.length > 0) {
+    logger.info(tr('log.legacyPluginRemoved', { names: legacy.removed.join(', ') }))
+  }
+  for (const failure of legacy.failed) {
+    logger.error(tr('log.legacyPluginRemoveFailed', { detail: failure }))
+  }
+
   const plugins = BUNDLED_PLUGINS.map((name) => ({ name, sourceDir: bundledPluginDir(name) }))
   const result = ensureProfile({
     dir,
@@ -182,12 +256,12 @@ function prepareEnvironment() {
   })
   for (const { name, sourceDir } of plugins) {
     if (!sourceDir) {
-      logger.error(tr('log.whaleMissing', { name }))
+      logger.error(tr('log.pluginSourceMissing', { name }))
     } else if (!resolvePackageDir(name, { dshRoot: runtime.dshRoot, profile: dir })) {
       logger.error(tr('log.pluginNotInstalled', { name }))
     }
   }
-  return { ...result, runtime: runtime.mode }
+  return { ...result, runtime: runtime.mode, legacy }
 }
 
 // ---------------------------------------------------------------- 状态
@@ -237,6 +311,14 @@ function fullState() {
     server: serverSnapshot,
     // 界面形态：自动模式下未运行 → 全面控制台、运行中 → 悬浮条；手动模式下取用户选定值
     surface: currentSurface(serverSnapshot.state),
+    // 悬浮栏当前在窗口里的左上角坐标。
+    // 渲染层不知道这个值（它是子视图，自身坐标恒从 0,0 起算），而拖动需要绝对坐标，
+    // 所以由主进程算好推给它——拖动时以它为基准加鼠标位移。
+    overlayPos: (() => {
+      if (!overlayView || overlayView.webContents.isDestroyed()) return null
+      const bounds = overlayView.getBounds()
+      return { x: bounds.x, y: bounds.y }
+    })(),
     themes: themeList(),
     language: effectiveLanguage(),
     languages: LANGUAGES.map((language) => ({ id: language.id, label: language.label })),
@@ -290,6 +372,34 @@ function pushState() {
   updateTray()
 }
 
+/**
+ * 定时刷新托盘：菜单里那一行「已运行 Xh Ym」要跟着时间走。
+ *
+ * 为什么需要定时器：托盘菜单是静态的，`Menu.buildFromTemplate()` 之后文字就定死了，
+ * 不会自己更新。重建一个 Menu 很便宜（就几个 label），所以按 tick 重建即可。
+ *
+ * 30 秒是折中：分钟内足够准，又不会频繁打扰系统。
+ */
+const TRAY_TICK_MS = 30 * 1000
+let trayTicker = null
+
+function startTrayTicker() {
+  if (trayTicker) return
+  trayTicker = setInterval(() => {
+    // 服务没在跑时 startedAt 是 0，菜单里不会出现这一行，也就没必要空转
+    if (!server || !server.snapshot().startedAt) return
+    updateTray()
+  }, TRAY_TICK_MS)
+  // 别让这个定时器拖住进程退出
+  trayTicker.unref?.()
+}
+
+function stopTrayTicker() {
+  if (!trayTicker) return
+  clearInterval(trayTicker)
+  trayTicker = null
+}
+
 function sendOverlay(command) {
   if (overlayView && !overlayView.webContents.isDestroyed()) {
     overlayView.webContents.send('overlay:command', command)
@@ -318,6 +428,16 @@ function layoutViews() {
   positionOverlay(width, height)
 }
 
+/**
+ * 定位悬浮选项栏。
+ *
+ * 两种位置来源：
+ *   - 默认锚定**右上角**（避开右下角的桌面宠物）
+ *   - 用户拖过之后，用记下来的 `overlayPos`（相对窗口左上角的偏移）
+ *
+ * 拖动位置会做**边界收敛**：窗口缩小后原来的坐标可能把面板挤出去，
+ * 所以每次都把 x/y 夹回可视范围，而不是只依赖拖动那一刻的合法性。
+ */
 function positionOverlay(windowWidth, windowHeight) {
   if (!overlayView) return
   // 控制台形态：叠加视图铺满窗口（内容本来就要占满，也不需要点击穿透）
@@ -327,13 +447,25 @@ function positionOverlay(windowWidth, windowHeight) {
   }
   const width = Math.max(120, Math.min(overlaySize.width, windowWidth - OVERLAY_MARGIN * 2))
   const height = Math.max(40, Math.min(overlaySize.height, windowHeight - OVERLAY_MARGIN * 2))
-  // 悬浮栏锚定右上角：DSH 的小鲸鱼挂件在右下角，避开它
-  overlayView.setBounds({
-    x: windowWidth - width - OVERLAY_MARGIN,
-    y: OVERLAY_MARGIN,
-    width,
-    height,
-  })
+
+  const saved = config.all().overlayPos
+  let x
+  let y
+  if (saved && Number.isFinite(saved.x) && Number.isFinite(saved.y)) {
+    x = saved.x
+    y = saved.y
+  } else {
+    // 默认右上角
+    x = windowWidth - width - OVERLAY_MARGIN
+    y = OVERLAY_MARGIN
+  }
+  // 夹回可视范围：面板必须完整可见（用户要求「整个选项栏都显示出来」）
+  const maxX = Math.max(OVERLAY_MARGIN, windowWidth - width - OVERLAY_MARGIN)
+  const maxY = Math.max(OVERLAY_MARGIN, windowHeight - height - OVERLAY_MARGIN)
+  x = Math.min(Math.max(OVERLAY_MARGIN, x), maxX)
+  y = Math.min(Math.max(OVERLAY_MARGIN, y), maxY)
+
+  overlayView.setBounds({ x: Math.round(x), y: Math.round(y), width, height })
 }
 
 function createWindow() {
@@ -722,19 +854,40 @@ async function openUi() {
 
 // ---------------------------------------------------------------- 托盘
 
+/**
+ * 格式化「DSH 已经跑了多久」。
+ *
+ * 只在托盘里用，所以尽量短：<1h 显示 `12m 34s`，否则 `3h 05m`，跨天再加天数。
+ * 服务没跑（startedAt 为 0）时返回 null，调用方据此不显示这一行。
+ *
+ * @param {number} startedAt 毫秒时间戳；0 表示没在跑
+ * @returns {string|null}
+ */
+function formatUptime(startedAt) {
+  if (!startedAt) return null
+  const seconds = Math.max(0, Math.floor((Date.now() - startedAt) / 1000))
+  const days = Math.floor(seconds / 86400)
+  const hours = Math.floor((seconds % 86400) / 3600)
+  const minutes = Math.floor((seconds % 3600) / 60)
+  const secs = seconds % 60
+  if (days > 0) return `${days}d ${String(hours).padStart(2, '0')}h`
+  if (hours > 0) return `${hours}h ${String(minutes).padStart(2, '0')}m`
+  return `${minutes}m ${String(secs).padStart(2, '0')}s`
+}
+
 function updateTray() {
   if (!tray || tray.isDestroyed()) return
   const project = config.activeProject()
   const snapshot = server ? server.snapshot() : { state: 'stopped' }
   const label = tr(`state.${snapshot.state}`)
 
+  // tooltip 显示：标题 · 状态 / 端口 / 已运行多久。
+  // 余额**不在这里**了——它归桌面宠物负责（气泡里能看到余额+峰谷+每轮花费），
+  // 托盘再显示一遍是重复信息。这里换成运行时长，是托盘独有的、有用的信息。
   let tooltip = `${tr('app.title')} · ${label}`
   if (project) tooltip += `\n${tr('service.port', { port: project.port })}`
-  if (balance) {
-    const amount = `${balance.currency || ''} ${fmtMoney(balance.totalBalance)}`.trim()
-    tooltip += `\n${tr('tray.balance', { value: amount })}`
-    if (balance.todayUsage != null) tooltip += `\n${tr('tray.todayUsage', { value: fmtMoney(balance.todayUsage) })}`
-  }
+  const uptime = formatUptime(snapshot.startedAt)
+  if (uptime) tooltip += `\n${tr('tray.uptime', { value: uptime })}`
   tray.setToolTip(tooltip)
   tray.setContextMenu(buildTrayMenu())
 }
@@ -744,14 +897,15 @@ function buildTrayMenu() {
   const busy = snapshot.state === 'starting' || snapshot.state === 'stopping'
   const active = snapshot.state === 'running' || snapshot.state === 'external'
 
+  // 余额两行已换成「已运行多久」一行。
+  //
+  // 托盘菜单是**静态**的（buildFromTemplate 那一刻把文字定死），而运行时长要一直在走。
+  // 所以 updateTray() 会被定时调用重建菜单（见 startUptimeTicker）。
+  // 也就是说：菜单里这条时间戳最多比真实值晚一个 tick。
+  const uptime = formatUptime(snapshot.startedAt)
   return Menu.buildFromTemplate([
     { label: tr('tray.status', { state: tr(`state.${snapshot.state}`) }), enabled: false },
-    ...(balance
-      ? [
-          { label: tr('tray.balance', { value: `${balance.currency || ''} ${fmtMoney(balance.totalBalance)}`.trim() }), enabled: false },
-          { label: tr('tray.todayUsage', { value: fmtMoney(balance.todayUsage) }), enabled: false },
-        ]
-      : []),
+    ...(uptime ? [{ label: tr('tray.uptime', { value: uptime }), enabled: false }] : []),
     { type: 'separator' },
     { label: tr('tray.showWindow'), click: () => openUi() },
     { label: tr('tray.toggleOverlay'), click: () => sendOverlay('toggle') },
@@ -797,6 +951,8 @@ function createTray() {
   tray.setContextMenu(buildTrayMenu())
   tray.on('click', () => openUi())
   tray.on('double-click', () => sendOverlay('toggle'))
+  // 托盘里的「已运行 X」要一直走，靠这个定时器重建菜单
+  startTrayTicker()
 }
 
 // ---------------------------------------------------------------- 服务控制
@@ -867,7 +1023,7 @@ function startBalancePolling() {
     if (snapshot.state !== 'running' && snapshot.state !== 'external') {
       balance = null
     } else {
-      const data = await fetchJson(`http://127.0.0.1:${project.port}/dsh-whale/balance.json`)
+      const data = await fetchJson(`http://127.0.0.1:${project.port}/dsh-pet/balance.json`)
       balance = data && data.ok ? data : null
     }
     updateTray()
@@ -904,9 +1060,9 @@ function runPluginCommand({ mode, name, spec }) {
       return resolve({ ok: false, error })
     }
     const argsByMode = {
-      install: ['plugin', '--profile', 'web', 'add', spec || WHALE_SPEC],
-      update: ['plugin', '--profile', 'web', 'update', name || WHALE_NAME],
-      remove: ['plugin', '--profile', 'web', 'remove', name || WHALE_NAME],
+      install: ['plugin', '--profile', 'web', 'add', spec || PET_SPEC],
+      update: ['plugin', '--profile', 'web', 'update', name || PET_NAME],
+      remove: ['plugin', '--profile', 'web', 'remove', name || PET_NAME],
     }
     const args = argsByMode[mode]
     if (!args) return resolve({ ok: false, error: `未知操作：${mode}` })
@@ -1037,7 +1193,7 @@ function registerIpc() {
   ipcMain.handle('balance:refresh', async () => {
     const project = config.activeProject()
     if (!project) return null
-    const data = await fetchJson(`http://127.0.0.1:${project.port}/dsh-whale/balance.json`)
+    const data = await fetchJson(`http://127.0.0.1:${project.port}/dsh-pet/balance.json`)
     balance = data && data.ok ? data : null
     updateTray()
     return balance
@@ -1052,6 +1208,40 @@ function registerIpc() {
     const height = Math.max(40, Math.round(Number(size?.height) || DEFAULT_OVERLAY_SIZE.height))
     if (width === overlaySize.width && height === overlaySize.height) return { ok: true }
     overlaySize = { width, height }
+    if (mainWindow && !mainWindow.isDestroyed()) positionOverlay(...mainWindow.getContentSize())
+    return { ok: true }
+  })
+
+  /**
+   * 悬浮栏拖动结束：记住新位置。
+   *
+   * 坐标由渲染层给（它知道鼠标与面板左上角的差），主进程只负责夹边界 + 存盘，
+   * 因为「能放到哪」取决于窗口大小，那是主进程才知道的事。
+   */
+  ipcMain.handle('overlay:move', (_event, pos) => {
+    if (!mainWindow || mainWindow.isDestroyed()) return { ok: false }
+    const [windowWidth, windowHeight] = mainWindow.getContentSize()
+    const x = Number(pos?.x)
+    const y = Number(pos?.y)
+    if (!Number.isFinite(x) || !Number.isFinite(y)) return { ok: false }
+
+    const width = Math.max(120, Math.min(overlaySize.width, windowWidth - OVERLAY_MARGIN * 2))
+    const height = Math.max(40, Math.min(overlaySize.height, windowHeight - OVERLAY_MARGIN * 2))
+    const maxX = Math.max(OVERLAY_MARGIN, windowWidth - width - OVERLAY_MARGIN)
+    const maxY = Math.max(OVERLAY_MARGIN, windowHeight - height - OVERLAY_MARGIN)
+    config.patch({
+      overlayPos: {
+        x: Math.round(Math.min(Math.max(OVERLAY_MARGIN, x), maxX)),
+        y: Math.round(Math.min(Math.max(OVERLAY_MARGIN, y), maxY)),
+      },
+    })
+    positionOverlay(windowWidth, windowHeight)
+    return { ok: true, pos: config.all().overlayPos }
+  })
+
+  /** 「恢复默认位置」：把悬浮栏放回右上角。 */
+  ipcMain.handle('overlay:resetPos', () => {
+    config.patch({ overlayPos: null })
     if (mainWindow && !mainWindow.isDestroyed()) positionOverlay(...mainWindow.getContentSize())
     return { ok: true }
   })

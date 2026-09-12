@@ -440,6 +440,72 @@ async function refreshLanguage() {
   renderLogs()
 }
 
+// ---------------------------------------------------------------- 拖动
+
+/**
+ * 悬浮栏拖动。
+ *
+ * 背景：悬浮栏不是独立窗口，而是主窗口里的一个**子视图**（WebContentsView），
+ * 位置由主进程按「右上角」算出来。所以「拖动」= 不断上报新的左上角坐标，
+ * 主进程 setBounds 之后再回报。视图本身只覆盖面板那一小块，
+ * 鼠标一旦移出面板就收不到 mousemove 了 —— 所以这里用
+ * **指针捕获**（setPointerCapture）把事件留在面板上，这是关键。
+ *
+ * 坐标换算：面板左上角在窗口里的位置 = 拖动开始时的位置 + 鼠标位移。
+ * 我们不知道面板当前在窗口的哪个坐标，但**位移**是准的，
+ * 所以用「起点用未知量表示、每次上报相对位移」的方式交给主进程去夹边界。
+ */
+let overlayPos = null   // 面板左上角在**窗口**里的坐标，由主进程随 state 推送
+
+function bindDrag() {
+  const handle = $('dragHandle')
+  if (!handle) return
+
+  let dragging = false
+  let startX = 0
+  let startY = 0
+  let baseX = 0
+  let baseY = 0
+
+  handle.addEventListener('pointerdown', (event) => {
+    // 只在悬浮条形态下拖动；控制台铺满窗口，没有「位置」可言
+    if (document.body.dataset.surface === 'console') return
+    if (event.button !== 0) return
+    if (!overlayPos) return          // 主进程还没给出基准坐标，先不动
+    dragging = true
+    startX = event.clientX
+    startY = event.clientY
+    baseX = overlayPos.x
+    baseY = overlayPos.y
+    // 指针捕获：视图只覆盖面板这一小块，不捕获的话鼠标一移出面板就丢事件
+    handle.setPointerCapture(event.pointerId)
+    document.body.classList.add('dragging')
+    event.preventDefault()
+  })
+
+  handle.addEventListener('pointermove', (event) => {
+    if (!dragging) return
+    const dx = event.clientX - startX
+    const dy = event.clientY - startY
+    if (Math.abs(dx) < 2 && Math.abs(dy) < 2) return   // 节流，避免高频 IPC
+    api.overlayMove({ x: baseX + dx, y: baseY + dy })
+  })
+
+  const end = (event) => {
+    if (!dragging) return
+    dragging = false
+    try { handle.releasePointerCapture(event.pointerId) } catch { /* 已释放 */ }
+    document.body.classList.remove('dragging')
+    // 收尾时用精确位移再报一次（pointermove 里是节流的）
+    api.overlayMove({ x: baseX + (event.clientX - startX), y: baseY + (event.clientY - startY) })
+  }
+  handle.addEventListener('pointerup', end)
+  handle.addEventListener('pointercancel', end)
+
+  // 双击把手 = 回到默认位置（右上角）
+  handle.addEventListener('dblclick', () => api.overlayResetPos())
+}
+
 // ---------------------------------------------------------------- 事件
 
 function bind() {
@@ -530,6 +596,7 @@ function bind() {
 
 async function main() {
   bind()
+  bindDrag()
   bindAccordion()
   $('panel').querySelector('.acc[data-key="service"]').classList.add('open')
 
@@ -552,6 +619,8 @@ async function main() {
     const languageChanged = Boolean(next.language) && next.language !== lastLanguage
     const themeChanged = Boolean(next.config) && current && next.config.theme !== current.config.theme
     current = next
+    // 面板的窗口坐标随状态更新——拖动时以它为基准
+    if (next.overlayPos) overlayPos = next.overlayPos
     if (languageChanged) {
       // 语言变了：先换词典再整屏重绘（refreshLanguage 内部会 renderAll）
       refreshLanguage()
@@ -566,6 +635,7 @@ async function main() {
   })
 
   current = await api.getState()
+  if (current.overlayPos) overlayPos = current.overlayPos
   renderAll()
 
   new ResizeObserver(reportSize).observe(document.body)

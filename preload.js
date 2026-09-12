@@ -42,6 +42,9 @@ contextBridge.exposeInMainWorld('dshClient', {
 
   /** 上报悬浮栏自身的内容尺寸，主进程据此精确设置视图区域。 */
   overlayResize: (size) => ipcRenderer.invoke('overlay:resize', size),
+  /** 悬浮栏拖动结束后记住位置；resetOverlayPos 放回右上角默认位。 */
+  overlayMove: (pos) => ipcRenderer.invoke('overlay:move', pos),
+  overlayResetPos: () => ipcRenderer.invoke('overlay:resetPos'),
 
   onState: (callback) => ipcRenderer.on('state', (_event, state) => callback(state)),
   onLog: (callback) => ipcRenderer.on('log', (_event, line) => callback(line)),
