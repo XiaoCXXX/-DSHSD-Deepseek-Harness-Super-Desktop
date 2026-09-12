@@ -464,46 +464,75 @@ function bindDrag() {
   let dragging = false
   let startX = 0
   let startY = 0
-  let baseX = 0
-  let baseY = 0
+  let sentX = 0
+  let sentY = 0
+  let frame = 0          // requestAnimationFrame 句柄：把多次 pointermove 合并成一帧一次
+  let pendingX = 0
+  let pendingY = 0
+
+  /** 把累积的位移发出去。一帧最多一次，避免 IPC 把主进程打满。 */
+  function flush() {
+    frame = 0
+    if (!pendingX && !pendingY) return
+    const dx = pendingX
+    const dy = pendingY
+    pendingX = 0
+    pendingY = 0
+    sentX += dx
+    sentY += dy
+    api.overlayMove({ dx, dy, commit: false })
+  }
 
   handle.addEventListener('pointerdown', (event) => {
-    // 只在悬浮条形态下拖动；控制台铺满窗口，没有「位置」可言
+    // 控制台形态铺满窗口，没有「位置」可言
     if (document.body.dataset.surface === 'console') return
     if (event.button !== 0) return
-    if (!overlayPos) return          // 主进程还没给出基准坐标，先不动
     dragging = true
     startX = event.clientX
     startY = event.clientY
-    baseX = overlayPos.x
-    baseY = overlayPos.y
+    sentX = 0
+    sentY = 0
+    pendingX = 0
+    pendingY = 0
     // 指针捕获：视图只覆盖面板这一小块，不捕获的话鼠标一移出面板就丢事件
-    handle.setPointerCapture(event.pointerId)
+    try { handle.setPointerCapture(event.pointerId) } catch { /* 不支持就算了 */ }
     document.body.classList.add('dragging')
     event.preventDefault()
+    event.stopPropagation()
   })
 
   handle.addEventListener('pointermove', (event) => {
     if (!dragging) return
-    const dx = event.clientX - startX
-    const dy = event.clientY - startY
-    if (Math.abs(dx) < 2 && Math.abs(dy) < 2) return   // 节流，避免高频 IPC
-    api.overlayMove({ x: baseX + dx, y: baseY + dy })
+    // 待发量 = 目标总位移 − 已发出的量。用「总位移」而不是逐次累加，
+    // 这样即使某一帧被合并掉，最终位置依然精确。
+    pendingX = (event.clientX - startX) - sentX
+    pendingY = (event.clientY - startY) - sentY
+    if (!pendingX && !pendingY) return
+    if (!frame) frame = requestAnimationFrame(flush)
   })
 
   const end = (event) => {
     if (!dragging) return
     dragging = false
+    if (frame) { cancelAnimationFrame(frame); frame = 0 }
+    pendingX = 0
+    pendingY = 0
     try { handle.releasePointerCapture(event.pointerId) } catch { /* 已释放 */ }
     document.body.classList.remove('dragging')
-    // 收尾时用精确位移再报一次（pointermove 里是节流的）
-    api.overlayMove({ x: baseX + (event.clientX - startX), y: baseY + (event.clientY - startY) })
+    // 松手：用**精确的总位移**再报一次（不带 commit:false → 主进程落盘）
+    api.overlayMove({
+      dx: (event.clientX - startX) - sentX,
+      dy: (event.clientY - startY) - sentY,
+    })
   }
   handle.addEventListener('pointerup', end)
   handle.addEventListener('pointercancel', end)
 
   // 双击把手 = 回到默认位置（右上角）
-  handle.addEventListener('dblclick', () => api.overlayResetPos())
+  handle.addEventListener('dblclick', (event) => {
+    event.preventDefault()
+    api.overlayMove({ mode: 'reset' })
+  })
 }
 
 // ---------------------------------------------------------------- 事件

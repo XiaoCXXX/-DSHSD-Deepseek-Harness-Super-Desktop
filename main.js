@@ -1213,37 +1213,77 @@ function registerIpc() {
   })
 
   /**
-   * 悬浮栏拖动结束：记住新位置。
+   * 悬浮栏拖动。
    *
-   * 坐标由渲染层给（它知道鼠标与面板左上角的差），主进程只负责夹边界 + 存盘，
-   * 因为「能放到哪」取决于窗口大小，那是主进程才知道的事。
+   * 渲染层只上报**鼠标位移**（dx/dy），主进程拿自己那份真实 bounds 做基准算新位置。
+   *
+   * 为什么不传绝对坐标：渲染层是子视图，自身坐标系恒从 0,0 起算，它拿不到
+   * 「面板在窗口里的哪个位置」。之前让它用 state.overlayPos 做基准，那个值是
+   * pushState() 时算的、拖动过程中不更新，所以第二次拖动会从过期坐标算起、
+   * 位置越拖越偏。改成传位移后，基准永远取主进程**当下**的 bounds，不会过期。
+   *
+   * pos 里带 mode：
+   *   'drag'  —— 拖动中，按位移移动
+   *   'reset' —— 双击复位，回到右上角
    */
-  ipcMain.handle('overlay:move', (_event, pos) => {
+  /**
+   * 悬浮栏拖动。
+   *
+   * 渲染层只上报**鼠标位移**（dx/dy 增量），主进程拿自己那份真实 bounds 做基准
+   * 算新位置。
+   *
+   * 为什么不传绝对坐标：渲染层是子视图，自身坐标系恒从 0,0 起算，拿不到
+   * 「面板在窗口里的位置」。之前让它用 state.overlayPos 做基准，那个值是
+   * pushState() 时算的、拖动过程中不更新，所以第二次拖动会从过期坐标算起、
+   * 位置越拖越偏。
+   *
+   * 性能：拖动过程中**绝不写磁盘**。pointermove 一秒能来几十次，
+   * 每次 config.patch() 都会落一次盘，直接表现就是拖动又卡又飘（实测就是这个问题）。
+   * 所以 drag 阶段只改内存与 setBounds，位置在**松手那一次**（commit: true）才写盘。
+   */
+  ipcMain.handle('overlay:move', (_event, payload) => {
+    if (!overlayView || overlayView.webContents.isDestroyed()) return { ok: false }
     if (!mainWindow || mainWindow.isDestroyed()) return { ok: false }
     const [windowWidth, windowHeight] = mainWindow.getContentSize()
-    const x = Number(pos?.x)
-    const y = Number(pos?.y)
-    if (!Number.isFinite(x) || !Number.isFinite(y)) return { ok: false }
+
+    let x
+    let y
+    const mode = payload && payload.mode
+
+    if (mode === 'reset') {
+      const width = Math.max(120, Math.min(overlaySize.width, windowWidth - OVERLAY_MARGIN * 2))
+      x = windowWidth - width - OVERLAY_MARGIN
+      y = OVERLAY_MARGIN
+    } else if (mode === 'absolute') {
+      // 绝对定位：自动化测试用，也方便以后加「吸附到某角」
+      x = Number(payload.x)
+      y = Number(payload.y)
+    } else {
+      // 位移模式：基准取**当前** bounds（永远是最新的，不会过期）
+      const bounds = overlayView.getBounds()
+      const dx = Number(payload && payload.dx)
+      const dy = Number(payload && payload.dy)
+      if (!Number.isFinite(dx) || !Number.isFinite(dy)) return { ok: false }
+      x = bounds.x + dx
+      y = bounds.y + dy
+    }
 
     const width = Math.max(120, Math.min(overlaySize.width, windowWidth - OVERLAY_MARGIN * 2))
     const height = Math.max(40, Math.min(overlaySize.height, windowHeight - OVERLAY_MARGIN * 2))
     const maxX = Math.max(OVERLAY_MARGIN, windowWidth - width - OVERLAY_MARGIN)
     const maxY = Math.max(OVERLAY_MARGIN, windowHeight - height - OVERLAY_MARGIN)
-    config.patch({
-      overlayPos: {
-        x: Math.round(Math.min(Math.max(OVERLAY_MARGIN, x), maxX)),
-        y: Math.round(Math.min(Math.max(OVERLAY_MARGIN, y), maxY)),
-      },
-    })
-    positionOverlay(windowWidth, windowHeight)
-    return { ok: true, pos: config.all().overlayPos }
-  })
+    const clamped = {
+      x: Math.round(Math.min(Math.max(OVERLAY_MARGIN, x), maxX)),
+      y: Math.round(Math.min(Math.max(OVERLAY_MARGIN, y), maxY)),
+    }
 
-  /** 「恢复默认位置」：把悬浮栏放回右上角。 */
-  ipcMain.handle('overlay:resetPos', () => {
-    config.patch({ overlayPos: null })
-    if (mainWindow && !mainWindow.isDestroyed()) positionOverlay(...mainWindow.getContentSize())
-    return { ok: true }
+    // 位置先落到内存（拖动期间读配置的地方要用），但**不写盘**
+    config.all().overlayPos = clamped
+    overlayView.setBounds({ ...overlayView.getBounds(), x: clamped.x, y: clamped.y })
+
+    // 只有松手（或复位）那一次才落盘
+    if (!payload || payload.commit !== false) config.save()
+    return { ok: true, pos: clamped }
   })
 }
 
