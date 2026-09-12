@@ -198,6 +198,19 @@ var css = [
   // 长句：允许换行，最多三行（多出来的被 .dshwv-text 的 overflow:hidden 裁掉）
   '.dshwv-wrap{white-space:normal;max-width:100%;line-height:1.2}',
   '.dshwv-hint{font-size:calc(var(--dshw-bw) * 0.095);color:#93a6cc;letter-spacing:.02em;margin-top:calc(var(--dshw-bw) * 0.02);line-height:1.15}',
+  // ---- 常驻层：气泡关着时牌子上显示的内容 ----
+  //
+  // 牌子平时是空的（整块留白很浪费），这里常驻显示宠物名字 + 一句话状态，
+  // 点开时才换成余额/峰谷/台词。
+  // 与 .dshwv-text 分层：那层管「点开后的内容」，这层管「平时的内容」，
+  // 两者用 opacity 交叉淡入淡出，互不覆盖（之前把两者挤在同一层里，切换时会闪）。
+  '.dshwv-idle{--dshw-bw:calc(var(--dshw-base) * var(--dshw-ratio) * 0.52);position:absolute;left:0;top:0;width:100%;height:100%;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;pointer-events:none;opacity:1;transition:opacity .2s ease;padding:3% 5%;box-sizing:border-box;overflow:hidden;gap:calc(var(--dshw-bw) * 0.03)}',
+  // 气泡打开时，常驻层淡出
+  '.dshwv-bubble.dshwv-bubble-open .dshwv-idle{opacity:0;transition:opacity .12s ease}',
+  '.dshwv-idle-name{font-size:calc(var(--dshw-bw) * 0.15);font-weight:800;letter-spacing:.06em;color:#4a5f96;line-height:1.1}',
+  '.dshwv-idle-line{font-size:calc(var(--dshw-bw) * 0.092);color:#8fa2c9;letter-spacing:.02em;line-height:1.25;white-space:normal}',
+  // 小装饰：名字下面一条短横线，让牌面不那么单调
+  '.dshwv-idle-rule{width:calc(var(--dshw-bw) * 0.16);height:2px;border-radius:1px;background:currentColor;opacity:.28;color:#4a5f96}',
   // ---- 设置面板（自己重做的版本，不是上游那套竖排弹层）----
   //
   // 结构：齿轮按钮 → 分组的卡片面板。
@@ -501,6 +514,32 @@ textBox.appendChild(labelEl)
 textBox.appendChild(amountEl)
 textBox.appendChild(hintEl)
 
+// 常驻层：不按的时候牌子上显示什么。
+// 内容 = 宠物名 + 一条随状态变化的小字（运行中 / 已停止 / 出错…）。
+// 单独一层，和点开后的 .dshwv-text 用 opacity 交叉淡入淡出。
+var idleBox = document.createElement('div')
+idleBox.className = 'dshwv-idle'
+var idleName = document.createElement('div')
+idleName.className = 'dshwv-idle-name'
+idleName.textContent = '小深'
+var idleRule = document.createElement('div')
+idleRule.className = 'dshwv-idle-rule'
+var idleLine = document.createElement('div')
+idleLine.className = 'dshwv-idle-line'
+idleLine.textContent = '点我看看余额'
+idleBox.appendChild(idleName)
+idleBox.appendChild(idleRule)
+idleBox.appendChild(idleLine)
+
+/**
+ * 更新常驻层的副标题。
+ * 按状态给一句人话，比一直显示「点我看看余额」有信息量。
+ */
+function setIdleLine(text) {
+  if (!text || text === idleLine.textContent) return
+  idleLine.textContent = text
+}
+
 // 气泡容器：**不再画 SVG 气泡**，它的图形已经被宠物举的牌子取代。
 //
 // 但这一层必须保留，因为它还担着两件事：
@@ -510,6 +549,7 @@ textBox.appendChild(hintEl)
 // 于是「可点击区域」正好是牌子的范围，而不是整张图。
 var bubbleBox = document.createElement('div')
 bubbleBox.className = 'dshwv-bubble'
+bubbleBox.appendChild(idleBox)   // 常驻层在下，点开的内容层在上
 bubbleBox.appendChild(textBox)
 bubbleBox.addEventListener('click', function (e) {
   e.stopPropagation()
@@ -577,7 +617,9 @@ function buildGroup1() {
 }
 var RANDOM_GROUPS = [
   { w: 45, lines: buildGroup1 },
-  { w: 7, lines: function () { return singleCenter('B', pickOne(['好模型... ↓', '好女孩...↓'])) } },
+  // 箭头朝**上**：牌子在宠物手里、宠物在牌子上方，所以「↓」指不到任何东西。
+  // 原来那套是气泡时代的设计——气泡飘在宠物侧面，箭头向下指宠物。
+  { w: 7, lines: function () { return singleCenter('B', pickOne(['好模型... ↑', '好女孩...↑'])) } },
   { w: 7, lines: function () { return singleCenter('A', pickOne(['不知道用户有什么用，先赶走吧~', '我...我...我也要挣钱吗？', '我去吃饭啦，测完叫我', '压力一只蓝色大肥鱼？！', 'DeepSleep...', '坏了...用户彻底怒了！']), '', true) } },
   // 「揉脸」组：原来是显示一张 rua.gif，现在改成让主体自己做挤压变形。
   // 不再需要 gif 元素，也就不需要「gif 加载失败就降级成文字」那套兜底。
@@ -875,9 +917,22 @@ function animateAmount(from, to, currency, duration) {
   }
   animId = requestAnimationFrame(step)
 }
+/**
+ * 常驻层副标题的文案。
+ * 目标：不按的时候也有信息量，而不是一块空白牌子。
+ */
+function idleText() {
+  if (state.status === 'error') return '余额获取失败，点我重试'
+  if (state.balance === null) return '点我看看余额'
+  if (state.isPeak) return '高峰期 · 点我看明细'
+  return '点我看看余额'
+}
+
 function render() {
   // 消耗金额泡泡显示期间，余额渲染不覆盖其内容（金额行/标题行/提示行）
   if (costBubbleActive) return
+  // 常驻层的副标题：先更新，它和气泡内容无关，任何时候都该反映当前状态
+  setIdleLine(idleText())
   var amount, hint
   if (state.status === 'error') {
     amount = shown !== null ? fmt(shown, state.currency) : '--'
@@ -889,11 +944,19 @@ function render() {
     amount = shown !== null ? fmt(shown, state.currency) : fmt(state.balance, state.currency)
     hint = '今日已用 ' + (state.todayUsage !== null && state.todayUsage !== undefined ? fmt(state.todayUsage, state.currency) : '--')
   }
-  amountEl.textContent = amount
-  if (bubbleRandomActive && bubbleRandomLines) {
-    applyBubbleLines(bubbleRandomLines)
-  } else {
-    setHint(hint)
+  // 先算出余额三行的文案，但**只有在确实要显示它们时才写进 DOM**。
+  //
+  // 这里踩过一个坑：原来是先无条件写 amountEl.textContent，再按分支覆盖。
+  // 气泡关闭后（bubbleRandomActive=false）走 else 分支只调 setHint()，
+  // 于是金额行已经被改成余额数字 —— 气泡淡出的那一瞬间会闪一下「变了色的余额」。
+  var visible = bubbleShown && bubbleOn && !costBubbleActive
+  if (visible) {
+    if (bubbleRandomActive && bubbleRandomLines) {
+      applyBubbleLines(bubbleRandomLines)
+    } else {
+      amountEl.textContent = amount
+      setHint(hint)
+    }
   }
 }
 function express() {
