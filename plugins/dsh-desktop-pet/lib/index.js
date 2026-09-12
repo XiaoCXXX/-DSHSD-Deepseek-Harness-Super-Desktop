@@ -207,7 +207,9 @@ var css = [
   '.dshwv-idle{--dshw-bw:calc(var(--dshw-base) * var(--dshw-ratio) * 0.52);position:absolute;left:0;top:0;width:100%;height:100%;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;pointer-events:none;opacity:1;transition:opacity .2s ease;padding:3% 5%;box-sizing:border-box;overflow:hidden;gap:calc(var(--dshw-bw) * 0.03)}',
   // 气泡打开时，常驻层淡出
   '.dshwv-bubble.dshwv-bubble-open .dshwv-idle{opacity:0;transition:opacity .12s ease}',
-  '.dshwv-idle-name{font-size:calc(var(--dshw-bw) * 0.15);font-weight:800;letter-spacing:.06em;color:#4a5f96;line-height:1.1}',
+  // 名字行：字号按牌宽给，但**长名字要能自己缩下来**（否则会溢出牌子）。
+  // max-width + nowrap 是兜底；真正的自适应在 fitIdleName() 里按实际宽度算。
+  '.dshwv-idle-name{font-size:calc(var(--dshw-bw) * 0.15);font-weight:800;letter-spacing:.06em;color:#4a5f96;line-height:1.1;max-width:100%;white-space:nowrap;overflow:hidden}',
   '.dshwv-idle-line{font-size:calc(var(--dshw-bw) * 0.092);color:#8fa2c9;letter-spacing:.02em;line-height:1.25;white-space:normal}',
   // 小装饰：名字下面一条短横线，让牌面不那么单调
   '.dshwv-idle-rule{width:calc(var(--dshw-bw) * 0.16);height:2px;border-radius:1px;background:currentColor;opacity:.28;color:#4a5f96}',
@@ -521,7 +523,7 @@ var idleBox = document.createElement('div')
 idleBox.className = 'dshwv-idle'
 var idleName = document.createElement('div')
 idleName.className = 'dshwv-idle-name'
-idleName.textContent = '小深'
+idleName.textContent = '吃白饭的大🐟'
 var idleRule = document.createElement('div')
 idleRule.className = 'dshwv-idle-rule'
 var idleLine = document.createElement('div')
@@ -530,6 +532,29 @@ idleLine.textContent = '点我看看余额'
 idleBox.appendChild(idleName)
 idleBox.appendChild(idleRule)
 idleBox.appendChild(idleLine)
+
+/**
+ * 常驻层的名字按实际宽度自适应字号。
+ *
+ * 字号在 CSS 里是按牌宽算的固定值（15%），短名字正好、长名字（如「吃白饭的大🐟」）
+ * 会横向溢出牌子。这里量一次真实宽度，超出就把字号等比压小。
+ * 只做一次（名字是常量），不需要观察器。
+ */
+function fitIdleName() {
+  try {
+    var box = idleBox.getBoundingClientRect()
+    if (!box.width) return
+    // 先清掉上一次的缩放，量出「原始字号下有多宽」
+    idleName.style.fontSize = ''
+    var natural = idleName.scrollWidth
+    var avail = idleBox.clientWidth - parseFloat(getComputedStyle(idleBox).paddingLeft || '0') * 2
+    if (!avail || natural <= avail) return
+    var base = parseFloat(getComputedStyle(idleName).fontSize)
+    if (!base) return
+    // 留 4% 余量，避免贴边
+    idleName.style.fontSize = (base * (avail / natural) * 0.96).toFixed(2) + 'px'
+  } catch (err) {}
+}
 
 /**
  * 更新常驻层的副标题。
@@ -991,6 +1016,8 @@ function settle() {
     state.top = clamp(state.top, 0, Math.max(0, vp.h - h))
   }
   express()
+  // 位置/尺寸定了之后再量名字宽度：缩放变化时字号要跟着重算
+  fitIdleName()
 }
 function refresh(manual) {
   if (busy) return
