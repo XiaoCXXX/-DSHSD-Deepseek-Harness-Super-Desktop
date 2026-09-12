@@ -1,4 +1,4 @@
-import fs from 'node:fs'
+﻿import fs from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
@@ -418,7 +418,7 @@ soundSelect.appendChild(soundOpt('fx1', '音效1'))
 soundSelect.addEventListener('change', function () { setSoundSet(soundSelect.value) })
 var usageSelect = document.createElement('select')
 usageSelect.className = 'dshwv-select'
-usageSelect.appendChild(soundOpt('ledger', '小鲸鱼记账 (推荐)'))
+usageSelect.appendChild(soundOpt('ledger', '花销记账 (推荐)'))
 usageSelect.appendChild(soundOpt('token', '实时·令牌 (用法：去问dsh)'))
 usageSelect.addEventListener('change', function () { setUsageMode(usageSelect.value) })
 var peakSelect = document.createElement('select')
@@ -1764,7 +1764,7 @@ function apply(ctx) {
           }
         } catch (err) {}
       }
-      throw new Error('whale image not found')
+      throw new Error('pet image not found')
     }
 
     function pickBalanceInfo(infos) {
@@ -2007,7 +2007,7 @@ function apply(ctx) {
             // transient network/API blip: keep serving the last known balance
             return { ...balanceCache.payload, stale: true, error: payload.error }
           }
-          if (!payload.transient) console.error('[whale-balance]', payload.code, payload.error)
+          if (!payload.transient) console.error('[desktop-pet]', payload.code, payload.error)
           return payload
         })
         .catch((err) => ({
@@ -2121,7 +2121,7 @@ function apply(ctx) {
           res.end(bytes)
         } catch (err) {
           res.writeHead(404, { 'Content-Type': 'text/plain; charset=utf-8' })
-          res.end('whale image unavailable: ' + String((err && err.message) || err))
+          res.end('pet image unavailable: ' + String((err && err.message) || err))
         }
       },
     }))
