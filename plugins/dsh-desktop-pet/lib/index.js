@@ -513,24 +513,7 @@ bubbleBox.className = 'dshwv-bubble'
 bubbleBox.appendChild(textBox)
 bubbleBox.addEventListener('click', function (e) {
   e.stopPropagation()
-  if (!bubbleShown) return
-  if (costBubbleActive) {
-    // 消耗金额泡泡：点击关闭（确认）
-    hideCostBubble()
-    return
-  }
-  if (bubbleRandomActive) {
-    // 再次点击：关闭
-    hideBubble()
-  } else {
-    // 首次点击：切到随机台词段，并重置自动关闭计时——
-    // 保证第二段台词有完整停留时间（否则第 4 秒点击只看到 0.5 秒）
-    bubbleRandomActive = true
-    bubbleRandomLines = pickRandomLines()
-    swapBubbleContent(function () { applyBubbleLines(bubbleRandomLines) })
-    if (bubbleTimer) { clearTimeout(bubbleTimer); bubbleTimer = null }
-    bubbleTimer = setTimeout(hideBubble, BUBBLE_MS)
-  }
+  advanceBubble()
 })
 
 var body = document.createElement('div')
@@ -721,6 +704,59 @@ function restoreBubbleLines() {
   hintEl.style.color = ''
   render()
 }
+/**
+ * 往下翻一屏气泡内容。
+ *
+ * 三屏循环：余额 → 随机台词/峰谷 → 关闭。
+ * 「点宠物」和「点牌子」都走这里，所以两种点法行为一致——
+ * 之前只有「点牌子」能翻页，而牌子在宠物下方、宠物身体在上方，
+ * 用户很自然会一直点宠物，结果每次都被 showBubble() 重置回余额，
+ * 表现就是「继续按没反应」。
+ */
+/**
+ * 让宠物对「被按一下」做出反应。
+ *
+ * 动作：揉脸（rua）/ 点头（nod）/ 摇头（shake）/ 弹一下（pop）——
+ * 全部是 CSS 变换，零素材。
+ *
+ * 触发策略：
+ *   - 每次点按都做一个小动作，让点击有反馈（原来只有揉脸那一组台词会动，
+ *     所以看上去「只会呼吸、没有其它变化」）；
+ *   - 按「上一轮对话的结果」挑语义合适的动作：成功→点头，出错→摇头，
+ *     余额刷新→弹一下；
+ *   - 揉脸保留给台词组，动作更大、更俏皮。
+ */
+function reactToPress() {
+  // 按状态挑动作，避免每次都是同一个，看起来才「活着」
+  var kind = 'pop'
+  try {
+    if (state.status === 'error') kind = 'shake'
+    else if (state.isPeak) kind = 'nod'
+    else if (shown !== null) kind = 'pop'
+  } catch (err) { /* 状态还没就绪就用默认动作 */ }
+  playAction(kind)
+}
+
+function advanceBubble() {
+  if (!bubbleOn) return
+  if (costBubbleActive) return
+  reactToPress()
+  // 还开着：往下翻一屏
+  if (bubbleShown) {
+    if (bubbleRandomActive) {
+      hideBubble()          // 台词屏再点一次 → 关闭
+      return
+    }
+    bubbleRandomActive = true
+    bubbleRandomLines = pickRandomLines()
+    swapBubbleContent(function () { applyBubbleLines(bubbleRandomLines) })
+    if (bubbleTimer) { clearTimeout(bubbleTimer); bubbleTimer = null }
+    bubbleTimer = setTimeout(hideBubble, BUBBLE_MS)
+    return
+  }
+  showBubble()
+}
+
 function showBubble() {
   if (!bubbleOn) return
   // 消耗金额泡泡显示期间，余额变动不再弹出普通泡泡
@@ -920,6 +956,7 @@ function refresh(manual) {
         if (changed && !currencyChanged) {
           if (!manual) {
             showBubble()
+            playAction('pop')   // 余额变了：弹一下，提示「数字要滚了」
             state.status = 'changing'
             // balance-change bubble: wait 0.3s after it floats out, then roll the number
             if (animDelayTimer) clearTimeout(animDelayTimer)
@@ -1373,7 +1410,8 @@ function endDrag(e, clickAllowed) {
   pressUp()
   root.classList.remove('dshwv-dragging')
   setWidgetCursor(isWhaleHit(e) ? 'grab' : '')
-  if (clickAllowed && !drag.moved) { showBubble(); refresh(true); return }
+  // 点按（没拖动）：翻一屏气泡内容。第一次开、之后逐屏翻，和点牌子行为一致。
+  if (clickAllowed && !drag.moved) { advanceBubble(); refresh(true); return }
   var dx = e.clientX - drag.startX
   var dy = e.clientY - drag.startY
   var left = clamp(drag.origLeft + dx, 0, Math.max(0, drag.vp.w - drag.w))
