@@ -95,14 +95,26 @@ module.exports = {
   },
   nsis: {
     oneClick: false,
-    perMachine: false,
+    // 装给「所有用户」，安装时会请求管理员权限（弹一次 UAC）。
+    //
+    // 为什么改：原来是 perMachine: false（按用户安装、免提权），但同时又允许
+    // 用户自选安装目录 —— 于是有人选到 D:\Program Files\... 这种需要管理员
+    // 才能写的目录，安装到一半报「不能打开要写入的文件: Uninstall ...exe」，
+    // 只能中止。实测确认过（好友的截图）。
+    // 改成 perMachine: true 后，安装器会主动提权，写 Program Files 是合法的；
+    // 卸载项也从 HKCU 挪到 HKLM，管理器里能看到完整信息。
+    perMachine: true,
     allowToChangeInstallationDirectory: true,
     createDesktopShortcut: true,
     createStartMenuShortcut: true,
     shortcutName: 'DSHSD',
     uninstallDisplayName: 'DSHSD',
     deleteAppDataOnUninstall: false,
-    // 构建期把这两个名字回显到日志，便于核对（NSIS 头部是压缩的，二进制里搜不到）
+    // 这个 include 干两件事：
+    //   1. 构建期把 SHORTCUT_NAME / UNINSTALL_DISPLAY_NAME 回显到日志（便于核对）
+    //   2. 定义 customCheckAppRunning，覆盖默认的「应用还在运行」检查
+    //      —— 默认实现只 taskkill 同名进程，而我们一次拉起 9 个 Electron 进程，
+    //         残留任一都会让安装器弹「无法关闭」并退出。
     include: 'nsis/verify-defines.nsh',
   },
 }
