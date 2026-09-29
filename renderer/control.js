@@ -48,6 +48,9 @@ function formatUptime(startedAt) {
 
 /** 面板以外必须不占视图区域，否则会挡住 DSH 界面的点击。 */
 function reportSize() {
+  // 拖动中不上报尺寸：主进程此时会忽略它（几何冻结），但少发一次 IPC 就少一次
+  // 无谓的主进程唤醒。拖动结束后 end() 会补报一次真实尺寸。
+  if (document.body.classList.contains('dragging')) return
   const rect = document.body.getBoundingClientRect()
   const width = Math.ceil(rect.width)
   const height = Math.ceil(rect.height)
@@ -488,8 +491,16 @@ function bindDrag() {
     if (document.body.dataset.surface === 'console') return
     if (event.button !== 0) return
     dragging = true
-    startX = event.clientX
-    startY = event.clientY
+    // ⚠ 必须用 **screenX/screenY**（屏幕坐标），不能用 clientX/clientY。
+    //
+    // client 坐标是「相对本视图页面」的，而这个视图**正是被拖动的对象**：
+    // 视图每移动 Δ，同一个静止的鼠标其 clientX 就跟着变 Δ。于是
+    //     pendingX = (clientX − startX) − sentX
+    // 把视图自己的位移又算了一遍，形成正反馈 —— 实测表现为「走一步停一步」，
+    // 拖 64px 只走 32px，肉眼就是来回抖/闪。
+    // 屏幕坐标只由鼠标决定，与视图位置无关，所以基准必须用屏幕坐标。
+    startX = event.screenX
+    startY = event.screenY
     sentX = 0
     sentY = 0
     pendingX = 0
@@ -505,8 +516,8 @@ function bindDrag() {
     if (!dragging) return
     // 待发量 = 目标总位移 − 已发出的量。用「总位移」而不是逐次累加，
     // 这样即使某一帧被合并掉，最终位置依然精确。
-    pendingX = (event.clientX - startX) - sentX
-    pendingY = (event.clientY - startY) - sentY
+    pendingX = (event.screenX - startX) - sentX
+    pendingY = (event.screenY - startY) - sentY
     if (!pendingX && !pendingY) return
     if (!frame) frame = requestAnimationFrame(flush)
   })
@@ -519,10 +530,14 @@ function bindDrag() {
     pendingY = 0
     try { handle.releasePointerCapture(event.pointerId) } catch { /* 已释放 */ }
     document.body.classList.remove('dragging')
-    // 松手：用**精确的总位移**再报一次（不带 commit:false → 主进程落盘）
+    // 松手：用**精确的总位移**再报一次（不带 commit:false → 主进程落盘并解冻）
     api.overlayMove({
-      dx: (event.clientX - startX) - sentX,
-      dy: (event.clientY - startY) - sentY,
+      dx: (event.screenX - startX) - sentX,
+      dy: (event.screenY - startY) - sentY,
+    }).finally(() => {
+      // 顺序很重要：必须等解冻之后再报尺寸，否则会被主进程当成拖动中的上报丢掉。
+      // 拖动期间余额文本可能已经变过，悬浮条实际宽度和冻结时不一样了。
+      reportSize()
     })
   }
   handle.addEventListener('pointerup', end)

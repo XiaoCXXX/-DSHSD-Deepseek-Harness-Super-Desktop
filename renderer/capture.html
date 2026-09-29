@@ -1,0 +1,26 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <meta http-equiv="Content-Security-Policy"
+        content="default-src 'self'; style-src 'self' 'unsafe-inline'; script-src 'self'" />
+  <title>选择截图区域</title>
+  <link rel="stylesheet" href="capture.css" />
+</head>
+<body>
+  <!-- 四块遮罩拼出「挖空」的选择区：比 clip-path 兼容性好，也更容易看清边界 -->
+  <div class="mask" id="mTop"></div>
+  <div class="mask" id="mBottom"></div>
+  <div class="mask" id="mLeft"></div>
+  <div class="mask" id="mRight"></div>
+
+  <div class="sel" id="sel" hidden>
+    <span class="size" id="size"></span>
+    <i class="h tl"></i><i class="h tr"></i><i class="h bl"></i><i class="h br"></i>
+  </div>
+
+  <div class="hint" id="hint">拖动选择区域 · Esc 取消</div>
+
+  <script src="capture.js"></script>
+</body>
+</html>

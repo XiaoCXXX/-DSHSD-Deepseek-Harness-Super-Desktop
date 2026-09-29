@@ -44,16 +44,34 @@ function get(pathname, cookie, timeoutMs = 4000) {
 
 /** 拉一次 /dsh-quick/ask，把 SSE 事件收齐（或到超时为止）。 */
 function quickAsk(query, cookie, timeoutMs) {
+  return ask(null, query, cookie, timeoutMs)
+}
+
+/**
+ * 同上，但带请求体（POST）。带图时必须走这条：
+ * 图片是 base64 的几 MB，塞不进 URL。
+ */
+function quickAskWithBody(body, query, cookie, timeoutMs) {
+  return ask(JSON.stringify(body), query, cookie, timeoutMs)
+}
+
+function ask(body, query, cookie, timeoutMs) {
   return new Promise((resolve) => {
     const events = []
     let status = 0
     let headers = {}
+    const payload = body ? Buffer.from(body, 'utf8') : null
+    const head = { accept: 'text/event-stream', cookie }
+    if (payload) {
+      head['content-type'] = 'application/json; charset=utf-8'
+      head['content-length'] = String(payload.length)
+    }
     const req = http.request({
       host: '127.0.0.1',
       port: PORT,
       path: `/dsh-quick/ask?${query}`,
-      method: 'GET',
-      headers: { accept: 'text/event-stream', cookie },
+      method: payload ? 'POST' : 'GET',
+      headers: head,
     }, (res) => {
       status = res.statusCode
       headers = res.headers
@@ -85,6 +103,7 @@ function quickAsk(query, cookie, timeoutMs) {
     }, timeoutMs)
     req.on('error', () => { clearTimeout(timer); resolve({ status, headers, events, timedOut: false }) })
     req.on('close', () => { clearTimeout(timer); resolve({ status, headers, events, timedOut: false }) })
+    if (payload) req.write(payload)
     req.end()
   })
 }
@@ -202,6 +221,64 @@ async function main() {
   for (const event of result.events.slice(-8)) {
     console.log(`  ${event.type}: ${JSON.stringify(event).slice(0, 200)}`)
   }
+
+  // ---- 带图提问（POST + JSON 体）
+  //
+  // 图片必须用**真能解码**的 PNG。踩过的坑：网上抄来的「1×1 透明 PNG」base64
+  // 虽然 PNG 头魔数正确、sharp 的 metadata() 也能读出 format=png，
+  // 但 DSH 的准入会做**全量解码**（sharp().raw().toBuffer()），那一步会抛
+  // `vipspng: libpng read error`，最终只看到一句笼统的
+  // 「Unsupported or malformed image data.」。用 sharp 现编码一张就不会有这个问题。
+  const sharp = require(path.join(ROOT, 'vendor', 'dsh', 'node_modules', 'sharp'))
+  const pngBytes = await sharp({
+    create: { width: 16, height: 16, channels: 3, background: { r: 200, g: 40, b: 40 } },
+  }).png().toBuffer()
+  const PNG_B64 = pngBytes.toString('base64')
+  console.log(`  … 带图提问用的 PNG：${pngBytes.length}B，base64 ${PNG_B64.length} 字符`)
+
+  const imgQuery = new URLSearchParams({
+    id: 'verify-image-1',
+    q: '这张图里是什么颜色',
+    session: 'dedicated',
+    summary: 'truncate',
+  }).toString()
+  console.log('  … 发起一次带图提问（POST + image part）')
+  const withImage = await quickAskWithBody({
+    images: [{ mediaType: 'image/png', data: PNG_B64, name: 'verify.png' }],
+  }, imgQuery, cookie, 90000)
+
+  note(withImage.status === 200, '带图请求返回 200', String(withImage.status))
+  note(withImage.events.length > 0, `带图请求收到 SSE 事件 ${withImage.events.length} 个`)
+  const imgError = withImage.events.find((event) => event.type === 'error')
+  // 关键断言：错误**不能**是「图片被拒」这类结构性错误。
+  // 隔离环境没凭据，最终一定会在模型那一步失败，那正是链路走通的证据。
+  const rejected = imgError && /图片|image|不支持|invalid|content/i.test(String(imgError.message || ''))
+  note(!rejected, '图片 part 被接受（没有因图片本身报错）',
+    imgError ? String(imgError.message || '').slice(0, 120) : '（无错误）')
+  if (imgError) note(true, '带图提问同样走到模型这一步才失败（符合隔离环境预期）',
+    String(imgError.message || '').slice(0, 120))
+
+  // ---- 纯图片提问（无文字）也必须被接受
+  const imgOnlyQuery = new URLSearchParams({
+    id: 'verify-image-2',
+    q: '',
+    session: 'dedicated',
+    summary: 'truncate',
+  }).toString()
+  const imgOnly = await quickAskWithBody({
+    images: [{ mediaType: 'image/png', data: PNG_B64 }],
+  }, imgOnlyQuery, cookie, 30000)
+  const imgOnlyError = imgOnly.events.find((event) => event.type === 'error')
+  note(!(imgOnlyError && String(imgOnlyError.message || '').includes('都为空')),
+    '只发图不发字也被接受（DSH 允许「至少一个文本 part 或附件」）',
+    imgOnlyError ? String(imgOnlyError.message || '').slice(0, 100) : '（无错误）')
+
+  // ---- 既无文字也无图：必须明确报错，不能静默
+  const emptyQuery = new URLSearchParams({ id: 'verify-empty', q: '', session: 'dedicated' }).toString()
+  const empty = await quickAsk(emptyQuery, cookie, 15000)
+  const emptyError = empty.events.find((event) => event.type === 'error')
+  note(Boolean(emptyError && String(emptyError.message || '').includes('都为空')),
+    '空请求被明确拒绝', emptyError ? String(emptyError.message || '') : '（没有报错）')
 
   cleanup()
   await sleep(800)

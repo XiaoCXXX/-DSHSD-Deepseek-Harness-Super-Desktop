@@ -207,6 +207,46 @@ async function main() {
     }
     const clientTarget = surface === 'bubble' ? bubble : control
 
+    // 悬浮窗专属：截图附件的渲染层逻辑。
+    // 真实抓屏没法在自动化里做（会去拍用户的屏幕），所以走 __dshBubble 钩子注入假图，
+    // 只测「缩略图 → 移除 → 只发图也能发」这条 UI 逻辑；传输层看 verify-quick-ask.js。
+    if (surface === 'bubble' && bubble) {
+      const hasButtons = await evaluate(bubble.send, `(() => ({
+        region: Boolean(document.getElementById('btnShotRegion')),
+        full: Boolean(document.getElementById('btnShotFull')),
+        titles: [document.getElementById('btnShotRegion').title, document.getElementById('btnShotFull').title],
+        bridge: typeof window.dshClient.captureScreen === 'function',
+        hook: Boolean(window.__dshBubble),
+      }))()`)
+      note(hasButtons.region && hasButtons.full, '悬浮窗有框选/全屏两个截图按钮',
+        hasButtons.titles.join(' / '))
+      note(hasButtons.bridge, '截图 IPC 已通过 preload 暴露')
+      note(hasButtons.hook, '验证钩子存在')
+
+      const ui = await evaluate(bubble.send, `(() => {
+        const before = window.__dshBubble.shotsHidden
+        window.__dshBubble.addShot(120, 68)
+        const added = { count: window.__dshBubble.chipCount, hidden: window.__dshBubble.shotsHidden,
+                        meta: window.__dshBubble.chipSizeText, sendDisabled: window.__dshBubble.sendDisabled }
+        const removed = window.__dshBubble.removeFirstShot()
+        const afterRemove = { count: window.__dshBubble.pendingCount, hidden: window.__dshBubble.shotsHidden }
+        window.__dshBubble.addShot(200, 100)
+        window.__dshBubble.addShot(300, 150)
+        const two = window.__dshBubble.chipCount
+        const canSendImageOnly = window.__dshBubble.canSendWithoutText
+        window.__dshBubble.clearShots()
+        return { before, added, removed, afterRemove, two, canSendImageOnly,
+                 cleared: window.__dshBubble.shotsHidden }
+      })()`)
+      note(ui.before === true, '没有待发截图时缩略图区是收起的')
+      note(ui.added.count === 1 && ui.added.hidden === false, '加一张图后出现一个缩略图', String(ui.added.count))
+      note(ui.added.meta === '120×68', '缩略图上标了尺寸（一眼确认截的是哪块）', ui.added.meta)
+      note(ui.removed === 0 && ui.afterRemove.hidden === true, '点 ✕ 能移除，清空后区域自动收起')
+      note(ui.two === 2, '可以同时挂多张图', String(ui.two))
+      note(ui.canSendImageOnly === true, '只发图、不打字也能发送（DSH 允许纯附件）')
+      note(ui.cleared === true, '清空后缩略图区收起')
+    }
+
     for (const theme of THEMES) {
       cells += 1
       const applied = await setTheme(theme)

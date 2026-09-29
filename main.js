@@ -1,4 +1,4 @@
-﻿'use strict'
+'use strict'
 
 // DSH 桌面客户端 —— Electron 主进程。
 //
@@ -38,6 +38,7 @@ const { surfaceForState } = require('./lib/surface')
 const { normalizeThemeId, themeList } = require('./lib/themes')
 const { t, messagesFor, normalizeLanguage, languageEntry, LANGUAGES } = require('./lib/i18n')
 const { writeDshLanguage } = require('./lib/dsh-settings')
+const { capture } = require('./lib/screenshot')
 
 const PARTITION = 'persist:dsh'
 /** 桌面宠物（原第三方小鲸鱼挂件的二次开发版），源码在仓库的 plugins/ 下。 */
@@ -74,6 +75,24 @@ let quitting = false
 let quitAfterStop = false
 let overlaySize = { ...DEFAULT_OVERLAY_SIZE }
 let surface = 'console'
+
+/**
+ * 悬浮栏是否正在被拖动。
+ *
+ * 拖动期间**冻结叠加视图的几何尺寸**，只允许改位置。原因是「反复闪烁」：
+ * 视图尺寸一旦在拖动过程中变化，setBounds 会重排整块透明视图，肉眼就是闪。
+ * 而尺寸变化是随时可能发生的——余额轮询刷新文本会让悬浮条变宽变窄一两像素，
+ * ResizeObserver 随即上报新尺寸，主进程就重新摆一次视图。用户一秒内能看到好几次。
+ *
+ * 所以拖动期间 overlay:resize 与 positionOverlay 一律跳过，松手后再按真实
+ * 内容尺寸校正一次。
+ *
+ * @type {{timer: NodeJS.Timeout|null}|null}
+ */
+let overlayDrag = null
+
+/** 拖动兜底：这么久没有新的位移上报就认为拖动已结束，自动解冻。 */
+const DRAG_IDLE_MS = 2000
 
 /** --hidden：窗口与托盘一律不显示，仅供开发期自动化验证使用。 */
 const HIDDEN = process.argv.includes('--hidden')
@@ -434,6 +453,28 @@ function syncThemeToDsh(themeId) {
   }
 }
 
+/**
+ * 标记录拖动正在进行，并续上兜底计时器。
+ *
+ * 拖动中渲染层每帧都会上报位移；任何一次上报都会把计时器往后推。
+ * 一旦指针事件丢失（指针移出窗口后抬起、渲染进程崩），计时器兜底解冻，
+ * 免得视图几何被永久冻住。
+ */
+function markOverlayDragging() {
+  if (!overlayDrag) overlayDrag = { timer: null }
+  if (overlayDrag.timer) clearTimeout(overlayDrag.timer)
+  overlayDrag.timer = setTimeout(() => { overlayDrag = null }, DRAG_IDLE_MS)
+  if (overlayDrag.timer.unref) overlayDrag.timer.unref()
+}
+
+/** 拖动结束：解冻，并按当前真实内容尺寸重新摆一次。 */
+function endOverlayDragging() {
+  if (!overlayDrag) return
+  if (overlayDrag.timer) clearTimeout(overlayDrag.timer)
+  overlayDrag = null
+  if (mainWindow && !mainWindow.isDestroyed()) positionOverlay(...mainWindow.getContentSize())
+}
+
 // ---------------------------------------------------------------- 视图布局
 
 function layoutViews() {
@@ -455,6 +496,8 @@ function layoutViews() {
  */
 function positionOverlay(windowWidth, windowHeight) {
   if (!overlayView) return
+  // 拖动中：几何尺寸冻结，位置由 overlay:move 每帧直接设置，这里不要插手
+  if (overlayDrag) return
   // 控制台形态：叠加视图铺满窗口（内容本来就要占满，也不需要点击穿透）
   if (activeSurface() === 'console') {
     overlayView.setBounds({ x: 0, y: 0, width: windowWidth, height: windowHeight })
@@ -653,12 +696,56 @@ function trimQuickTurns() {
   while (quickTurns.length > QUICK_MAX_TURNS) quickTurns.shift()
 }
 
+/** 历史里缩略图的最长边。 */
+const SHOT_THUMB_PX = 160
+
+/**
+ * 为对话历史做一张小缩略图。
+ *
+ * 为什么不能直接把整张图留在 quickTurns 里：一次截图 base64 动辄 0.7–1MB，
+ * 历史上限是 40 轮、每轮最多 4 张，全留在内存里能涨到上百 MB。
+ * 完整图片已经发给 DSH 存在会话里了，客户端这边留一张小图便于回看就够了。
+ *
+ * @param {{mediaType?:string, data?:string}} shot
+ * @returns {{mediaType:string, data:string, width:number, height:number}|null}
+ */
+function shotThumbnail(shot) {
+  try {
+    const image = nativeImage.createFromBuffer(Buffer.from(String(shot && shot.data || ''), 'base64'))
+    if (image.isEmpty()) return null
+    const size = image.getSize()
+    const longest = Math.max(size.width, size.height)
+    const scale = longest > SHOT_THUMB_PX ? SHOT_THUMB_PX / longest : 1
+    const small = scale < 1
+      ? image.resize({
+        width: Math.max(1, Math.round(size.width * scale)),
+        height: Math.max(1, Math.round(size.height * scale)),
+        quality: 'good',
+      })
+      : image
+    return {
+      mediaType: 'image/png',
+      data: small.toPNG().toString('base64'),
+      // 尺寸标的是**原图**的，缩略图只负责显示
+      width: size.width,
+      height: size.height,
+    }
+  } catch {
+    return null
+  }
+}
+
 /**
  * 向随包插件发起一次快速提问，并把 SSE 事件转发给气泡窗口。
+ *
+ * 带图时用 POST：图片是 base64 的几 MB，塞不进 URL，只能放请求体。
+ * URL 上的查询参数（id/q/session/summary）保持不变，所以插件侧解析逻辑不用动。
+ *
  * @param {string} question
+ * @param {Array<{mediaType:string, data:string, name?:string}>} [images]
  * @returns {{ok:boolean, id?:string, error?:string}}
  */
-function startQuickAsk(question) {
+function startQuickAsk(question, images = []) {
   const project = config.activeProject()
   if (!project) return { ok: false, error: tr('quick.noProject') }
   if (quickActive) return { ok: false, error: tr('quick.busy') }
@@ -670,7 +757,14 @@ function startQuickAsk(question) {
   if (!minted) return { ok: false, error: tr('quick.noCookie') }
 
   const id = `q-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`
-  const turn = { id, question, answer: '', summary: '', status: 'running', error: '' }
+  // 发给 DSH 的是原图；留在历史里的只有缩略图，避免内存被 base64 撑爆
+  const shots = images.map((img) => ({
+    mediaType: img && img.mediaType,
+    data: img && img.data,
+    name: img && img.name,
+  }))
+  const thumbs = shots.map(shotThumbnail).filter(Boolean)
+  const turn = { id, question, answer: '', summary: '', status: 'running', error: '', images: thumbs }
   quickTurns.push(turn)
   trimQuickTurns()
 
@@ -683,13 +777,21 @@ function startQuickAsk(question) {
     session: targetMode,
     summary: config.all().quickAsk.summary,
   })
+  const body = shots.length ? Buffer.from(JSON.stringify({ images: shots }), 'utf8') : null
   logger.info(tr('log.quickDispatch', { session: targetMode, summary: query.get('summary') }))
   const req = http.request({
     host: '127.0.0.1',
     port: project.port,
     path: `${QUICK_PATH}?${query.toString()}`,
-    method: 'GET',
-    headers: { accept: 'text/event-stream', cookie: `${minted.name}=${minted.value}` },
+    method: body ? 'POST' : 'GET',
+    headers: body
+      ? {
+        accept: 'text/event-stream',
+        cookie: `${minted.name}=${minted.value}`,
+        'content-type': 'application/json; charset=utf-8',
+        'content-length': String(body.length),
+      }
+      : { accept: 'text/event-stream', cookie: `${minted.name}=${minted.value}` },
   }, (res) => {
     if (res.statusCode !== 200) {
       let body = ''
@@ -722,9 +824,12 @@ function startQuickAsk(question) {
   req.on('error', (error) => {
     finishQuick(turn, { type: 'error', message: tr('quick.netError', { message: error.message }) })
   })
+  // 带图时把 JSON 体写进去；不带图就是普通的 GET，直接把请求收尾
+  if (body) req.write(body)
   req.end()
   quickActive = { id, req }
-  pushQuickEvent({ type: 'start', id, question })
+  // 事件与历史都用缩略图：渲染层只需要「显示了哪张图」，原图已经交给 DSH 了
+  pushQuickEvent({ type: 'start', id, question, images: thumbs })
   return { ok: true, id }
 }
 
@@ -1168,10 +1273,24 @@ function registerIpc() {
 
   // ---------------------------------------------------------- 便携悬浮窗
 
+  /**
+   * 截图。'region' 先弹全屏框选层，'full' 直接抓整个显示器。
+   * 返回的 image 已经是 DSH 能直接吃的图片 part（尺寸与体积都裁剪过）。
+   */
+  ipcMain.handle('screen:capture', async (_event, payload) => {
+    const mode = payload && payload.mode === 'full' ? 'full' : 'region'
+    const result = await capture({ mode, hint: tr('shot.selectHint') })
+    if (result.ok || result.canceled) return result
+    logger.warn(tr('shot.failed', { message: result.error }))
+    return { ok: false, error: tr('shot.failed', { message: result.error }) }
+  })
+
   ipcMain.handle('quick:ask', (_event, payload) => {
     const question = String(payload?.question || '').trim()
-    if (!question) return { ok: false, error: tr('quick.emptyQuestion') }
-    return startQuickAsk(question)
+    const images = Array.isArray(payload?.images) ? payload.images : []
+    // 允许「只发图不问字」：DSH 的 prompt 接受「至少一个非空文本 part 或附件」
+    if (!question && !images.length) return { ok: false, error: tr('quick.emptyQuestion') }
+    return startQuickAsk(question, images)
   })
   ipcMain.handle('quick:cancel', () => cancelQuickAsk())
   ipcMain.handle('quick:history', () => quickTurns)
@@ -1219,6 +1338,8 @@ function registerIpc() {
   ipcMain.handle('overlay:resize', (_event, size) => {
     // 控制台形态由主进程铺满窗口，忽略上报尺寸，否则会被缩回悬浮条大小
     if (activeSurface() === 'console') return { ok: true, ignored: true }
+    // 拖动中尺寸冻结：余额/耗时刷新导致的几像素宽度变化会让透明视图重排，表现就是闪
+    if (overlayDrag) return { ok: true, ignored: true }
     const width = Math.max(40, Math.round(Number(size?.width) || DEFAULT_OVERLAY_SIZE.width))
     const height = Math.max(40, Math.round(Number(size?.height) || DEFAULT_OVERLAY_SIZE.height))
     if (width === overlaySize.width && height === overlaySize.height) return { ok: true }
@@ -1294,10 +1415,22 @@ function registerIpc() {
 
     // 位置先落到内存（拖动期间读配置的地方要用），但**不写盘**
     config.all().overlayPos = clamped
-    overlayView.setBounds({ ...overlayView.getBounds(), x: clamped.x, y: clamped.y })
+    // 拖动中只改位置，**尺寸一律沿用当前 bounds**，不让任何尺寸变化参与进来。
+    // 位置没变就**不要碰 setBounds**：高 DPI 下（如 200%）一串 pointermove 常常落到
+    // 同一个整数 DIP 坐标，对透明视图重复下发同样的 setBounds 仍会触发合成器搬运，
+    // 一秒几十次就是肉眼看到的闪烁。
+    const current = overlayView.getBounds()
+    if (current.x !== clamped.x || current.y !== clamped.y) {
+      overlayView.setBounds({ ...current, x: clamped.x, y: clamped.y })
+    }
 
     // 只有松手（或复位）那一次才落盘
-    if (!payload || payload.commit !== false) config.save()
+    if (!payload || payload.commit !== false) {
+      endOverlayDragging()
+      config.save()
+    } else {
+      markOverlayDragging()
+    }
     return { ok: true, pos: clamped }
   })
 }

@@ -228,13 +228,21 @@ var css = [
   //                这样暗色主题下是「浅色叠在深色上」，不会白得刺眼）
   //   每个令牌都带兜底值：万一宿主没装主题包（比如别处复用这个插件），
   //   回落到原来的蓝白配色，不会花掉。
+  //
+  //   ⚠ 文字色必须用 --dsw-alias-label-primary，**不是** --dsw-alias-text-primary。
+  //   后者在 DSH 里并不存在（实测 DSH 声明的 357 个 --dsw-* 里没有它，正文色叫
+  //   --dsw-alias-label-primary），所以 var() 永远取到兜底的 #203170。
+  //   而面板底色 --dsw-alias-bg-base 是真的、会跟着主题走 —— 于是暗色主题下就是
+  //   「深蓝字压深色底」，完全读不了。这正是「设置界面字体有时变蓝、不可读」的原因。
+  //   中间保留旧名字做一层兼容，以防上游日后改名。
+  //   （牌子上的字是另一回事：它压在 PNG 牌子的浅色底上，必须固定深色，不走主题。）
   '.dshwv-gear{position:absolute;top:calc(40.55% + 6px);right:6px;width:26px;height:26px;border:none;border-radius:50%;background:#2f5bd7;color:#fff;cursor:pointer;pointer-events:auto;display:flex;align-items:center;justify-content:center;padding:0;z-index:2;opacity:0;transform:scale(.85);transition:opacity .16s ease,transform .18s cubic-bezier(.34,1.56,.64,1),background-color .16s ease}',
   '.dshwv-gear.dshwv-gear-visible{opacity:1;transform:scale(1)}',
   '.dshwv-gear:hover{filter:brightness(1.12)}',
   '.dshwv-gear svg{width:15px;height:15px;display:block;pointer-events:none}',
   '.dshwv-gear:focus-visible{outline:2px solid var(--dsw-alias-brand-primary,#2f5bd7);outline-offset:2px}',
   // 面板本体
-  '.dshwv-panel{--dshw-fg:var(--dsw-alias-text-primary,#203170);--dshw-ui:color-mix(in srgb,var(--dsw-alias-text-primary,#203170) 7%,transparent);--dshw-line:color-mix(in srgb,var(--dsw-alias-text-primary,#203170) 20%,transparent);position:fixed;width:268px;max-height:min(74vh,520px);overflow-y:auto;overscroll-behavior:contain;background:var(--dsw-alias-bg-base,#fff);color:var(--dshw-fg);border:1px solid var(--dshw-line);border-radius:14px;padding:10px;opacity:0;transform:scale(.94) translateY(-6px);transform-origin:top right;transition:opacity .16s ease,transform .2s cubic-bezier(.34,1.56,.64,1);pointer-events:none;z-index:10000;box-shadow:0 10px 32px rgba(16,26,64,.22);font-size:12px}',
+  '.dshwv-panel{--dshw-fg:var(--dsw-alias-label-primary,var(--dsw-alias-text-primary,#203170));--dshw-ui:color-mix(in srgb,var(--dshw-fg) 7%,transparent);--dshw-line:color-mix(in srgb,var(--dshw-fg) 20%,transparent);position:fixed;width:268px;max-height:min(74vh,520px);overflow-y:auto;overscroll-behavior:contain;background:var(--dsw-alias-bg-base,#fff);color:var(--dshw-fg);border:1px solid var(--dshw-line);border-radius:14px;padding:10px;opacity:0;transform:scale(.94) translateY(-6px);transform-origin:top right;transition:opacity .16s ease,transform .2s cubic-bezier(.34,1.56,.64,1);pointer-events:none;z-index:10000;box-shadow:0 10px 32px rgba(16,26,64,.22);font-size:12px}',
   '.dshwv-panel.dshwv-panel-open{opacity:1;transform:scale(1) translateY(0);pointer-events:auto}',
   '.dshwv-panel::-webkit-scrollbar{width:8px}',
   '.dshwv-panel::-webkit-scrollbar-thumb{background:var(--dshw-line);border-radius:4px}',

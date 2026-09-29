@@ -19,6 +19,8 @@ of the uninstall entry.
   options bar** anchored to the top-right corner.
 - The client extends DSH in two directions: configuration remains available while the service is
   stopped, and a complete theming system is added on top of DSH's own appearance.
+- A **portable floating window** provides quick asking, including **screenshots** of a region or the
+  whole screen attached to the question.
 - The client is **self-contained and offline-capable at install time**; it contains no credentials of
   any kind and performs no model calls of its own.
 
@@ -154,16 +156,51 @@ Two options are available under **Settings → Portable floating window**:
 | Session used by quick ask | Active session / Dedicated session | *Active* reuses the conversation currently open, so the full answer is already on screen. *Dedicated* opens a separate `快速提问 / Quick ask` session and leaves existing conversations untouched. |
 | Production of the short answer | Model / Truncate | *Model* issues one additional small model call, on the same route as the answer and with reasoning disabled, requesting a single sentence. *Truncate* simply cuts the full answer. Truncation is applied automatically if the model call fails. |
 
-#### 2.4.1 Implementation of quick ask
+#### 2.4.1 Screenshots
+
+The floating window can attach a screenshot to a question, so that questions about what is on screen
+do not require describing it in words.
+
+| Control | Action |
+|---|---|
+| `⛶` | Dims the screen and lets you drag out a region; releasing captures it |
+| `▣` | Captures the whole display immediately |
+
+The capture is taken **before** the selection overlay appears, so the overlay itself is never part of
+the image. Thumbnails of pending screenshots appear above the input, each with a remove button;
+several can be attached at once. A screenshot can be sent on its own, without any text.
+
+The overlay is cancelled with `Esc`, a right-click or a double-click. A drag smaller than a few pixels
+is treated as a mis-click and returns to the waiting state rather than cancelling.
+
+Captures are constrained before they are sent, because DSH enforces hard limits (a maximum of 2000
+pixels per side and 5 MB per image) and rejects anything outside them:
+
+- region selection is converted from display coordinates to image pixels using the display's scale
+  factor, so a scaled display (150%, 200%) selects exactly what was dragged;
+- the long edge is reduced to at most 2000 pixels, preserving aspect ratio and never enlarging;
+- the image is encoded as PNG, falling back to JPEG and then to further downscaling if it does not fit
+  the size budget.
+
+Screenshots are attached to the prompt as DSH `image` content parts. **The selected model must accept
+image input**; DSH refuses the prompt if it does not.
+
+#### 2.4.2 Implementation of quick ask
 
 The client does **not** use DSH's internal RPC. The installer instead ships a second DSH plugin,
 [`plugins/dsh-quick-ask`](plugins/dsh-quick-ask), which runs inside the DSH process and exposes a
 single ordinary SSE route:
 
 ```
-GET /dsh-quick/ask?id=…&q=…&session=active|dedicated&summary=model|truncate
-    → text/event-stream: answer / summary / done / error
+GET  /dsh-quick/ask?id=…&q=…&session=active|dedicated&summary=model|truncate
+POST /dsh-quick/ask?id=…&q=…&session=…&summary=…      body: {"images":[{"mediaType","data","name"}]}
+     → text/event-stream: answer / summary / done / error
 ```
+
+Attachments use `POST`, because a base64 image is far too large for a query string; the query
+parameters are unchanged, so both forms share one handler. The plugin re-validates every image at
+this boundary — media type, byte size and count — and discards any that fail rather than rejecting the
+whole request.
 
 Inside DSH the plugin uses `ctx.sessionController` to create or resume a session and to submit the
 prompt, `ctx.on('session/event')` to observe that specific turn, matched by the prompt's `requestId`,

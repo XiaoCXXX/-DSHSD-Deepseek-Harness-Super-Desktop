@@ -8,7 +8,10 @@
 // 不再从 GitHub 拉取任何第三方插件。
 //
 // 可通过环境变量覆盖：
-//   DSH_VERSION   要打包的 @deepseek-ai/dsh 版本（默认 0.1.5-rc.1）
+//   DSH_VERSION   要打包的 @deepseek-ai/dsh 版本（默认 0.1.7-rc.2）
+//
+// 注意：上游目前**从未发布过正式版**（没有无后缀的 X.Y.Z），npm 的 latest
+// 标签本身就是一个 rc，所以这里钉的就是 latest 指向的那个版本。
 
 const fs = require('node:fs')
 const os = require('node:os')
@@ -19,7 +22,7 @@ const { patchDshRoot } = require('./patch-vendor-console')
 const ROOT = path.resolve(__dirname, '..')
 const VENDOR_DSH = path.join(ROOT, 'vendor', 'dsh')
 const VENDOR_PLUGINS = path.join(ROOT, 'vendor', 'plugins')
-const DSH_VERSION = process.env.DSH_VERSION || '0.1.5-rc.1'
+const DSH_VERSION = process.env.DSH_VERSION || '0.1.7-rc.2'
 /**
  * 已被取代的插件名：它们的源码已经不在仓库里，但老版本构建可能把它们留在 vendor/。
  * 留着会被打进安装包并重新启用，用户机器上就会出现两个挂件。
@@ -28,13 +31,70 @@ const LEGACY_PLUGIN_NAMES = ['dsh-whale-widget']
 
 const log = (message) => console.log(`[stage] ${message}`)
 
+/**
+ * 用「先改名、再删除」替换 vendor/dsh。
+ *
+ * 为什么不是直接 `rmSync(vendor/dsh)`：客户端跑起来后会锁住这个目录里的文件，
+ * 直接递归删除会在删到一半时抛 EPERM —— 结果留下**一棵半删的树**，
+ * 既不能启动也没法当作参照，比不升级糟糕得多（这个坑已经踩过一次）。
+ *
+ * 改名是原子的：客户端即使在运行，改名通常也能成功，而且无论后续删除成不成功，
+ * 都不会留下半删的活树。删不掉就留着，下次构建再清。
+ */
+function replaceDshTree() {
+  const outgoing = `${VENDOR_DSH}.outgoing`
+  fs.rmSync(outgoing, { recursive: true, force: true })
+  try {
+    fs.renameSync(VENDOR_DSH, outgoing)
+  } catch (error) {
+    throw new Error(
+      `无法替换 vendor/dsh（${error.code || error.message}）。\n`
+      + '  最常见的原因是客户端正在运行、锁着这个目录。\n'
+      + '  请先从托盘退出客户端（右键托盘图标 → 退出客户端），再重新运行 npm run stage。',
+    )
+  }
+  try {
+    fs.rmSync(outgoing, { recursive: true, force: true })
+  } catch {
+    log('旧内核暂时删不掉（客户端可能仍在运行），已改名为 vendor/dsh.outgoing，下次构建会自动清理')
+  }
+}
+
+/** 读 vendor 里实际装着的 @deepseek-ai/dsh 版本；没装或读不出来返回 undefined。 */
+function installedDshVersion() {
+  try {
+    const manifest = path.join(VENDOR_DSH, 'node_modules', '@deepseek-ai', 'dsh', 'package.json')
+    return JSON.parse(fs.readFileSync(manifest, 'utf8')).version
+  } catch {
+    return undefined
+  }
+}
+
 function ensureDsh() {
   const entry = path.join(VENDOR_DSH, 'node_modules', '@deepseek-ai', 'dsh', 'lib', 'bin.js')
-  if (fs.existsSync(entry)) {
-    log(`随包 DSH 已就绪：${path.relative(ROOT, entry)}`)
+  const installed = installedDshVersion()
+
+  // 版本一致才算「已就绪」。
+  // 以前这里只判断 bin.js 存不存在，于是 DSH_VERSION 一旦装过就再也改不动了——
+  // 改版本号跑 stage 会直接跳过，静默打出一个旧内核的安装包。
+  if (installed !== undefined && installed === DSH_VERSION && fs.existsSync(entry)) {
+    log(`随包 DSH 已就绪：@deepseek-ai/dsh@${installed}`)
     return
   }
-  log(`安装 @deepseek-ai/dsh@${DSH_VERSION} → vendor/dsh（首次较慢）`)
+
+  // 目录存在但版本读不出来 = 半删或损坏的树，也必须整份换掉，
+  // 否则 npm 只会往上补文件，旧版本的残骸会一直留在里面。
+  if (fs.existsSync(VENDOR_DSH)) {
+    // 必须整份换掉：直接覆盖安装的话，旧版本特有的子包会留在
+    // vendor/dsh/node_modules 里，新旧混装比不升级更难查。
+    log(installed === undefined
+      ? 'vendor/dsh 存在但读不出内核版本（半删或损坏），替换它'
+      : `随包 DSH 版本不符（现有 ${installed} → 目标 ${DSH_VERSION}），替换 vendor/dsh`)
+    replaceDshTree()
+  } else {
+    log(`安装 @deepseek-ai/dsh@${DSH_VERSION} → vendor/dsh（首次较慢）`)
+  }
+
   fs.mkdirSync(VENDOR_DSH, { recursive: true })
   fs.writeFileSync(
     path.join(VENDOR_DSH, 'package.json'),
@@ -49,6 +109,12 @@ function ensureDsh() {
   ].find((candidate) => fs.existsSync(candidate))
   if (npmCli) execFileSync(process.execPath, [npmCli, ...args], { stdio: 'inherit' })
   else execFileSync('npm', args, { stdio: 'inherit', shell: true })
+
+  const after = installedDshVersion()
+  if (after !== DSH_VERSION) {
+    throw new Error(`安装后版本仍为 ${after ?? '(读不到)'}，期望 ${DSH_VERSION}`)
+  }
+  log(`已安装 @deepseek-ai/dsh@${after}`)
 }
 
 /**

@@ -162,12 +162,78 @@ html, body {
 
 .compose {
   display: flex;
-  align-items: flex-end;
+  flex-direction: column;
   gap: 6px;
   padding: 8px;
   border-top: 1px solid var(--c-border-soft);
   background: var(--c-surface);
   transition: background-color .28s ease, border-color .28s ease;
+}
+
+.compose-row {
+  display: flex;
+  align-items: flex-end;
+  gap: 6px;
+}
+
+/* 待发送的截图。缩略图给一眼确认，✕ 是移除 */
+.shots {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.shots[hidden] { display: none; }
+
+.shot {
+  position: relative;
+  flex: none;
+  border: 1px solid var(--c-border);
+  border-radius: 8px;
+  overflow: hidden;
+  background: var(--c-input-bg);
+  line-height: 0;
+}
+.shot img {
+  display: block;
+  max-width: 108px;
+  max-height: 68px;
+  width: auto;
+  height: auto;
+}
+.shot-meta {
+  display: block;
+  padding: 3px 5px;
+  font-size: 10px;
+  line-height: 1.3;
+  color: var(--c-text-mute);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+.shot-x {
+  position: absolute;
+  top: 2px;
+  right: 2px;
+  width: 17px;
+  height: 17px;
+  padding: 0;
+  border: none;
+  border-radius: 50%;
+  background: rgba(12, 16, 28, .72);
+  color: #fff;
+  font-size: 11px;
+  line-height: 1;
+  cursor: pointer;
+}
+.shot-x:hover { background: rgba(12, 16, 28, .9); }
+
+/* 用户消息里附过的图 */
+.ask-shot {
+  display: block;
+  max-width: 148px;
+  max-height: 96px;
+  margin: 2px 0 4px;
+  border: 1px solid var(--c-border);
+  border-radius: 8px;
 }
 
 #input {

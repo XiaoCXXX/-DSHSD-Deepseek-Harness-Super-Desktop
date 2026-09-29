@@ -1,0 +1,83 @@
+/* 全屏框选层。
+ *
+ * 只有四个矩形遮罩 + 一个选择框，没有图片资源：
+ * 真正的裁剪在主进程里用「弹出这一层之前」抓好的那帧图做，
+ * 所以这一层长什么样都不会影响截图结果。
+ */
+
+* { box-sizing: border-box; }
+
+html, body {
+  margin: 0;
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+  background: transparent;
+  cursor: crosshair;
+  user-select: none;
+  -webkit-user-select: none;
+  font: 12.5px/1.5 "Segoe UI", "Microsoft YaHei UI", system-ui, sans-serif;
+}
+
+/* 遮罩：盖住选择区以外的部分，留出中间那块「亮」的 */
+.mask {
+  position: fixed;
+  background: rgba(10, 14, 26, .45);
+  pointer-events: none;
+}
+
+.sel {
+  position: fixed;
+  pointer-events: none;
+  border: 1px solid rgba(255, 255, 255, .95);
+  box-shadow: 0 0 0 1px rgba(0, 0, 0, .35), 0 0 18px rgba(0, 0, 0, .28);
+}
+.sel[hidden] { display: none; }
+
+/* 四角手柄：只是视觉提示，不参与交互（整块区域都能拖） */
+.sel .h {
+  position: absolute;
+  width: 7px;
+  height: 7px;
+  background: #fff;
+  border-radius: 1px;
+}
+.sel .tl { left: -4px; top: -4px; }
+.sel .tr { right: -4px; top: -4px; }
+.sel .bl { left: -4px; bottom: -4px; }
+.sel .br { right: -4px; bottom: -4px; }
+
+/* 尺寸读数：贴在选择框外侧，空间不够时翻到里面 */
+.sel .size {
+  position: absolute;
+  left: 0;
+  top: -24px;
+  padding: 2px 7px;
+  border-radius: 6px;
+  background: rgba(18, 22, 38, .92);
+  color: #fff;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+.sel.flip-y .size { top: auto; bottom: -24px; }
+.sel.flip-x .size { left: auto; right: 0; }
+
+.hint {
+  position: fixed;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  padding: 7px 14px;
+  border-radius: 9px;
+  background: rgba(18, 22, 38, .92);
+  color: #fff;
+  font-size: 13px;
+  letter-spacing: .02em;
+  pointer-events: none;
+  transition: opacity .18s ease;
+}
+.hint.gone { opacity: 0; }
+
+@media (prefers-reduced-motion: reduce) {
+  .hint { transition: none; }
+}

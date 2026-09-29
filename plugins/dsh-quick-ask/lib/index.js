@@ -6,17 +6,23 @@
 //   （sessionController / llm），客户端只需要连一个普通的 SSE 路由。
 //
 // 对外只有一个路由：
-//   GET /dsh-quick/ask?id=<客户端生成的 id>&q=<问题>&session=active|dedicated&summary=model|truncate
+//   GET  /dsh-quick/ask?id=<客户端生成的 id>&q=<问题>&session=active|dedicated&summary=model|truncate
+//   POST 同上（URL 参数不变），请求体 {"images":[{"mediaType","data","name"}]}
+//   —— 附图必须用 POST：图片是 base64 的几 MB，塞不进 URL。
 //   响应 text/event-stream，事件：
 //     event: answer   data: {"text": "<这一轮到目前为止的正文>"}
 //     event: summary  data: {"text": "<一句话简答>"}
 //     event: done     data: {"sessionId": "...", "answer": "..."}
 //     event: error    data: {"message": "..."}
 //
-// 版本：0.1.0
+// 允许「只发图不发字」（DSH 的 prompt 接受「至少一个非空文本 part 或附件」），
+// 但文字与图片不能都为空。
+//
+// 版本：0.2.0
 
 import { BlockAssembler, createUserMessage } from '@deepseek-ai/dsh-llm'
 import { brandString } from '@deepseek-ai/dsh-brand'
+import { imageParts } from './image-parts.js'
 import fs from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
@@ -70,6 +76,29 @@ function truncate(text) {
   const cut = Math.max(...marks.map((mark) => head.lastIndexOf(mark)))
   return `${cut > TRUNCATE_CHARS * 0.5 ? head.slice(0, cut + 1) : head}…`
 }
+
+/** 图片 part 的校验规则在 ./image-parts.js（单独文件，便于脱离 DSH 运行时单测）。 */
+
+/** 读请求体（带图时是 JSON）。超过上限就放弃，避免被一个大 body 拖住。 */
+function readBody(req, limit = 24 * 1024 * 1024) {
+  return new Promise((resolve) => {
+    const chunks = []
+    let size = 0
+    req.on('data', (chunk) => {
+      size += chunk.length
+      if (size > limit) {
+        chunks.length = 0
+        req.destroy()
+        resolve('')
+        return
+      }
+      chunks.push(chunk)
+    })
+    req.on('end', () => resolve(Buffer.concat(chunks).toString('utf8')))
+    req.on('error', () => resolve(''))
+  })
+}
+
 
 /** 从一个 assistant 消息里取纯文本（tool-call 块不算）。 */
 function textOfMessage(message) {
@@ -309,6 +338,20 @@ function apply(ctx) {
     const summaryMode = url.searchParams.get('summary') === 'truncate' ? 'truncate' : 'model'
     const id = String(url.searchParams.get('id') || '')
 
+    // 带图时是 POST + JSON 体；不带图是普通 GET，body 为空。
+    // 图片只能走请求体：base64 的几 MB 塞不进 URL。
+    let images = []
+    if (req.method === 'POST') {
+      const raw = await readBody(req)
+      if (raw) {
+        try {
+          images = imageParts(JSON.parse(raw).images)
+        } catch (error) {
+          console.log(`[quick-ask] 请求体解析失败，按纯文本提问继续：${error?.message || error}`)
+        }
+      }
+    }
+
     res.writeHead(200, {
       'content-type': 'text/event-stream; charset=utf-8',
       'cache-control': 'no-store',
@@ -316,8 +359,9 @@ function apply(ctx) {
       'x-accel-buffering': 'no',
     })
 
-    if (!question) {
-      emit(res, 'error', { message: '问题为空' })
+    // 允许「只发图不问字」：DSH 的 prompt 接受「至少一个非空文本 part 或附件」
+    if (!question && !images.length) {
+      emit(res, 'error', { message: '问题和图片不能都为空' })
       res.end()
       return
     }
@@ -447,11 +491,19 @@ function apply(ctx) {
     })
 
     try {
+      // 文本 part 在前、图片在后：模型先读到问题再看图。
+      // 纯图片提问时不塞空的文本 part（空 part 会被 DSH 的校验判为无效内容）。
+      const content = []
+      if (question) content.push({ type: 'text', text: question })
+      for (const part of images) content.push(part)
+      if (images.length) {
+        console.log(`[quick-ask] 附带 ${images.length} 张图（${images.map((p) => p.mediaType).join(', ')}）`)
+      }
       await ctx.sessionController.prompt({
         requestId,
         sessionId,
         mode: 'queue',
-        content: [{ type: 'text', text: question }],
+        content,
         clientTimeZone: Intl.DateTimeFormat().resolvedOptions().timeZone,
       }, AbortSignal.timeout(15000))
     } catch (error) {

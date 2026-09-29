@@ -150,6 +150,130 @@ async function main() {
   })()`)
   note(timing < 1500, `60 次拖动上报耗时 ${timing.toFixed(0)}ms（越低越顺）`)
 
+  // ---- 7. 拖动期间「尺寸冻结」
+  // 反复闪烁的根源：拖动中任何一次 overlay:resize 都会让主进程重排整块透明视图。
+  // 余额轮询刷新文本 → 悬浮条宽度变一两像素 → ResizeObserver 上报 → 视图重排 → 闪。
+  // 这里在拖动中**故意**上报一个不同的尺寸，断言它被忽略、视图几何没变。
+  // 先离开右边界，否则位移会被边界夹住，断言算不通。
+  const geomBefore = (await evaluate(`window.dshClient.overlayMove({ dx: -300, dy: 120 })`)).pos
+  // 先进入拖动状态
+  await evaluate(`window.dshClient.overlayMove({ dx: 3, dy: 3, commit: false })`)
+  const ignoredResize = await evaluate(`window.dshClient.overlayResize({ width: 400, height: 54 })`)
+  note(ignoredResize && ignoredResize.ignored === true,
+    '拖动中上报尺寸被忽略（几何冻结）', JSON.stringify(ignoredResize))
+  // 拖动中仍然能改位置
+  const movedDuringDrag = await evaluate(`window.dshClient.overlayMove({ dx: 5, dy: 5, commit: false })`)
+  note(movedDuringDrag.ok && movedDuringDrag.pos.x === geomBefore.x + 8,
+    '拖动中位置照样更新（只冻尺寸，不冻位置）',
+    `期望 x=${geomBefore.x + 8}，实际 x=${movedDuringDrag.pos.x}`)
+  // 松手解冻：此时尺寸上报应被接受
+  await evaluate(`window.dshClient.overlayMove({ dx: 0, dy: 0 })`)
+  await sleep(200)
+  const acceptedResize = await evaluate(`window.dshClient.overlayResize({ width: 398, height: 54 })`)
+  note(acceptedResize && acceptedResize.ignored !== true,
+    '松手后尺寸上报被重新接受（解冻）', JSON.stringify(acceptedResize))
+
+  // ---- 8. 拖动期间不因尺寸上报而改变位置（端到端：位置必须单调）
+  await evaluate(`window.dshClient.overlayMove({ mode: 'reset' })`)
+  await sleep(150)
+  const monotonic = await evaluate(`(async () => {
+    const base = (await window.dshClient.getState()).overlayPos
+    const xs = []
+    for (let i = 1; i <= 12; i++) {
+      // 每一步都夹一次尺寸上报，模拟余额文本变化触发的 ResizeObserver
+      window.dshClient.overlayResize({ width: 396 + (i % 2), height: 54 })
+      const r = await window.dshClient.overlayMove({ dx: -6, dy: 2, commit: false })
+      xs.push(r.pos.x)
+    }
+    await window.dshClient.overlayMove({ dx: 0, dy: 0 })
+    return { base: base.x, xs }
+  })()`)
+  let backwards = 0
+  for (let i = 1; i < monotonic.xs.length; i++) {
+    if (monotonic.xs[i] !== monotonic.xs[i - 1] - 6) backwards++
+  }
+  note(backwards === 0, '拖动位置不受尺寸上报干扰（每一步精确 −6）',
+    `${monotonic.xs.join(',')}`)
+
+  // ---- 9. 拖动基准：必须用**屏幕**坐标，不能用 clientX/clientY
+  //
+  // 这是「拖动时来回闪烁」的真正原因，也是前面所有用例都漏掉的一条：
+  // client 坐标是「相对叠加视图页面」的，而这个视图**正是被拖动的那个对象**。
+  // 视图一移动 Δ，同一个静止的鼠标其 clientX 就跟着变 Δ，于是
+  //     位移 = (clientX − startClientX) − sentX
+  // 把视图自己的移动又算了一遍：视图前进 Δ → 上报 ≈ −2Δ → 被拉回去 → 再前进……
+  // 形成正反馈，肉眼就是来回抖/闪。
+  //
+  // 关键：必须打**真实 pointer 事件**打到把手上，才能走到 bindDrag 里的运算。
+  // 直接调 overlayMove 只是绕过渲染层在下发位移，测不到这段算术。
+  // 合成事件的 x/y 是「相对视图」的，所以这里每步都按 OS 的真实行为换算：
+  //     viewportX = 鼠标屏幕坐标 − 视图当前 x
+  async function dragWithRealEvents(steps = 16, stepPx = 4) {
+    await evaluate(`window.dshClient.overlayMove({ dx: -300, dy: 150 })`)
+    // 等视图真正落位再开始拖：位移是相对**主进程当前 bounds** 累积的，
+    // 上一次移动还没生效就按下会把那段位移算重，测出来是假的抖动。
+    let last = null
+    for (let i = 0; i < 20; i++) {
+      await sleep(50)
+      const st = await evaluate(`(async () => (await window.dshClient.getState()).overlayPos)()`)
+      if (last && st.x === last.x && st.y === last.y) break
+      last = st
+    }
+    const base = last
+    const h = await evaluate(`(() => {
+      const r = document.getElementById('dragHandle').getBoundingClientRect()
+      return { x: r.x + r.width / 2, y: r.y + r.height / 2 }
+    })()`)
+    const cursor0 = { x: base.x + h.x, y: base.y + h.y }   // 按下时鼠标的屏幕坐标
+    let view = { x: base.x, y: base.y }
+    const at = (cursor) => ({ x: Math.round(cursor.x - view.x), y: Math.round(cursor.y - view.y) })
+
+    const p0 = at(cursor0)
+    await send('Input.dispatchMouseEvent', {
+      type: 'mousePressed', x: p0.x, y: p0.y, button: 'left', clickCount: 1, buttons: 1,
+    })
+
+    const xs = []
+    const ys = []
+    for (let i = 1; i <= steps; i++) {
+      const cursor = { x: cursor0.x - i * stepPx, y: cursor0.y + i * 2 }
+      const p = at(cursor)
+      await send('Input.dispatchMouseEvent', {
+        type: 'mouseMoved', x: p.x, y: p.y, button: 'left', buttons: 1,
+      })
+      await sleep(26)
+      const st = await evaluate(`(async () => (await window.dshClient.getState()).overlayPos)()`)
+      view = { x: st.x, y: st.y }
+      xs.push(st.x)
+      ys.push(st.y)
+    }
+
+    const pe = at({ x: cursor0.x - steps * stepPx, y: cursor0.y + steps * 2 })
+    await send('Input.dispatchMouseEvent', {
+      type: 'mouseReleased', x: pe.x, y: pe.y, button: 'left', buttons: 0,
+    })
+    await sleep(150)
+    return { startX: base.x, startY: base.y, xs, ys }
+  }
+
+  const real = await dragWithRealEvents()
+  const expectTrack = Array.from({ length: 16 }, (_, i) => real.startX - 4 * (i + 1))
+  const tracked = real.xs.every((v, i) => v === expectTrack[i])
+  const stalled = real.xs.filter((v, i) => i > 0 && v === real.xs[i - 1]).length
+  note(tracked, '真实 pointer 事件下 1:1 跟随鼠标（每步精确 −4）',
+    tracked ? `${real.xs[0]} → ${real.xs[real.xs.length - 1]}`
+      : `实际 ${real.xs.join(',')}`)
+  note(stalled === 0, '拖动无「走一步停一步」（停步数应为 0）', `停步 ${stalled}`)
+  note(real.xs[real.xs.length - 1] === real.startX - 64,
+    '横向 16 步累计位移 = 鼠标总位移 64px',
+    `${real.startX} → ${real.xs[real.xs.length - 1]}`)
+  // 纵轴同样要 1:1：每步 +2
+  const expectTrackY = Array.from({ length: 16 }, (_, i) => real.startY + 2 * (i + 1))
+  const trackedY = real.ys.every((v, i) => v === expectTrackY[i])
+  note(trackedY, '纵向同样 1:1 跟随（每步精确 +2）',
+    trackedY ? `${real.ys[0]} → ${real.ys[real.ys.length - 1]}`
+      : `实际 ${real.ys.join(',')}`)
+
   ws.close()
   cleanup()
   await sleep(500)

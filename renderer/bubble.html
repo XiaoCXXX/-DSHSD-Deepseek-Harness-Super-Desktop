@@ -31,9 +31,15 @@
 
     <!-- 输入区 -->
     <footer class="compose">
-      <textarea id="input" rows="1" data-i18n-placeholder="quick.placeholder"
-                placeholder="输入问题，Enter 发送 / Shift+Enter 换行"></textarea>
-      <button class="send" id="btnSend" data-i18n-title="quick.send" title="发送">↵</button>
+      <!-- 待发送的截图：缩略图 + 移除。发送后清空 -->
+      <div class="shots" id="shots" hidden></div>
+      <div class="compose-row">
+        <button class="icon-btn" id="btnShotRegion" data-i18n-title="shot.region" title="框选截图">⛶</button>
+        <button class="icon-btn" id="btnShotFull" data-i18n-title="shot.full" title="全屏截图">▣</button>
+        <textarea id="input" rows="1" data-i18n-placeholder="quick.placeholder"
+                  placeholder="输入问题，Enter 发送 / Shift+Enter 换行"></textarea>
+        <button class="send" id="btnSend" data-i18n-title="quick.send" title="发送">↵</button>
+      </div>
     </footer>
   </div>
 

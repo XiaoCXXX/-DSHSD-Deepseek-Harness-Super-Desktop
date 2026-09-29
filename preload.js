@@ -40,6 +40,15 @@ contextBridge.exposeInMainWorld('dshClient', {
   quickHistory: () => ipcRenderer.invoke('quick:history'),
   quickOpenInDsh: (turnId) => ipcRenderer.invoke('quick:openInDsh', turnId),
 
+  /**
+   * 截图。mode: 'region' 先弹全屏框选层，'full' 直接抓整个显示器。
+   * 返回 { ok, image?: {mediaType, data, name, width, height, bytes}, canceled?, error? }。
+   */
+  captureScreen: (mode) => ipcRenderer.invoke('screen:capture', { mode }),
+  /** 框选层专用（capture.html）：把选择矩形或取消结果发回主进程。 */
+  captureDone: (payload) => ipcRenderer.send('capture:done', payload),
+  captureCancel: () => ipcRenderer.send('capture:cancel'),
+
   /** 上报悬浮栏自身的内容尺寸，主进程据此精确设置视图区域。 */
   overlayResize: (size) => ipcRenderer.invoke('overlay:resize', size),
   /** 悬浮栏拖动结束后记住位置；resetOverlayPos 放回右上角默认位。 */
