@@ -1,6 +1,6 @@
 {
   "name": "dsh-desktop-client",
-  "version": "1.0.0-HF1",
+  "version": "1.1.0-dsh0.1.7-rc.2",
   "description": "DSH Desktop Client (DSHSD) — a Windows desktop client for DeepSeek Harness. Ships DSH itself: no Node.js, pnpm or npx required.",
   "main": "main.js",
   "type": "commonjs",
