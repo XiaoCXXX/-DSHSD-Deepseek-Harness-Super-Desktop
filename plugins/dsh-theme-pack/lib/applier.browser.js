@@ -125,18 +125,60 @@
   // ---------------------------------------------------------------- UI 微调
   //
   // 只依赖 DSH 客户端稳定的 data-* 钩子（不是哈希类名），只改观感不改行为：
-  //   1) 输入区与对话面板合成一体：去掉居中浮动卡片的圆角/阴影/限宽，贴成面板底部
-  //   2) 本轮进行中折叠过程成员，直接显示答案（答案行带 data-turn-process-answer）
+  //   1) 本轮进行中折叠过程成员，直接显示答案（答案行带 data-turn-process-answer）
+  // 输入框保持 DSH 原生的圆角卡片，不做任何改动（见下方备注）。
   // 关掉：window.__dshThemePack.setUiTweaks(false)
   var UI_TWEAKS_ID = 'dsh-theme-ui-tweaks'
   var UI_TWEAKS_CSS = [
-    '/* 1) 输入区并入对话面板（仅在对话态生效，新会话 hero 保持原样） */',
-    'body:has([data-chat-turn]) [data-composer-seat]{background:var(--dsw-alias-bg-base,Canvas)!important}',
-    'body:has([data-chat-turn]) [data-composer-card]{width:100%!important;max-width:none!important;border-radius:0!important;box-shadow:none!important;border-top:.5px solid var(--dsw-alias-border-l2,rgba(0,0,0,.08))!important;background:var(--dsw-alias-bg-base,Canvas)!important}',
-    'body:has([data-chat-turn]) [data-composer-seat]>*{padding-left:0!important;padding-right:0!important}',
+    // 备注：这里原先还有一条「输入区并入对话面板」的微调
+    //   body:has([data-chat-turn]) [data-composer-card]{width:100%;border-radius:0;box-shadow:none;...}
+    // 它把输入框压成通栏直角。因为它是「对话态才生效」，所以切会话时先看到原生圆角卡片、
+    // 对话一渲染出来就被压平——正是那个「先圆角后变样」的闪烁。现已移除，保留原生圆角风格。
+    // 想退回通栏观感就把那条加回来；想整体关掉微调用 window.__dshThemePack.setUiTweaks(false)。
     '/* 2) 生成过程中直接显示答案：隐藏非答案的过程行 */',
     '[data-turn-process][data-open] [data-turn-process-member]:not([data-turn-process-answer]):not([data-turn-process-hidden]){display:none!important}',
   ].join('\n')
+
+  // ---------------------------------------------------------------- 形状语言
+  //
+  // DSH 自己把「几何」也做成了设计 token：--dsw-radius-{xs,sm,md,lg,panel} 与
+  // --dsw-shadow-lv3 在前端样式里被 var() 引用了 50+ 次（radius-sm 19 次、lg 13、
+  // md 11、panel 5、shadow-lv3 2）。所以改这一组值，卡片/按钮/菜单/面板/弹窗就
+  // 一起变成同一套圆角语言 —— 不碰 DOM、不用逐组件覆盖，DSH 升级也不会失配。
+  //
+  // 这些 token 在前端包里只有引用、没有定义（定义在别处），因此这里用 !important
+  // 覆盖并以 html/body 为根下发继承。个别写字面量的组件（如输入卡 28px）不受影响。
+  var SHAPE_ID = 'dsh-theme-shape'
+  var SHAPE_TOKENS = {
+    '--dsw-radius-xs': '6px',
+    '--dsw-radius-sm': '8px',
+    '--dsw-radius-md': '10px',
+    '--dsw-radius-lg': '14px',
+    '--dsw-radius-panel': '18px',
+    '--dsw-shadow-lv3': '0 6px 24px rgba(16,26,64,.12)',
+  }
+  var SHAPE_CSS = (function () {
+    var decls = Object.keys(SHAPE_TOKENS)
+      .map(function (k) { return k + ':' + SHAPE_TOKENS[k] + '!important' })
+      .join(';')
+    return ':root,html,body,body[data-ds-dark-theme]{' + decls + '}'
+  })()
+
+  function installShape() {
+    if (!document.head) return
+    var el = document.getElementById(SHAPE_ID)
+    if (!el) {
+      el = document.createElement('style')
+      el.id = SHAPE_ID
+      document.head.appendChild(el)
+    }
+    if (el.textContent !== SHAPE_CSS) el.textContent = SHAPE_CSS
+  }
+
+  function removeShape() {
+    var el = document.getElementById(SHAPE_ID)
+    if (el && el.parentNode) el.parentNode.removeChild(el)
+  }
 
   function installUiTweaks() {
     if (!document.head) return
@@ -155,6 +197,7 @@
   }
 
   function start() {
+    installShape()
     installUiTweaks()
     poll()
     setInterval(poll, POLL_MS)
@@ -167,6 +210,8 @@
     get appliedTheme() { return appliedId },
     clear: function () { clearVars(); if (modeObserver) modeObserver.disconnect() },
     setUiTweaks: function (on) { if (on === false) removeUiTweaks(); else installUiTweaks() },
+    setShape: function (on) { if (on === false) removeShape(); else installShape() },
+    shapeTokens: SHAPE_TOKENS,
   }
 
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', start)
