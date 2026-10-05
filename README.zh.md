@@ -39,7 +39,7 @@ DSH 桌面客户端是 **DeepSeek Harness（DSH）** 的 Windows 桌面宿主程
 
 ### 1.2 安装步骤
 
-1. 从 [Releases](../../releases) 下载 `DSHSD-Setup-<版本>.exe`，当前版本为 `1.2.0-dsh0.2.0-rc.2`。
+1. 从 [Releases](../../releases) 下载 `DSHSD-Setup-<版本>.exe`，当前版本为 `1.1.0-dsh0.2.0-rc.2`。
 2. 运行安装程序并按提示操作。由于安装包为全机器安装，Windows 会请求一次提权，请予批准。
 3. 安装完成后，桌面会创建 **DSHSD** 快捷方式，并在「应用和功能」中登记卸载项。
 
