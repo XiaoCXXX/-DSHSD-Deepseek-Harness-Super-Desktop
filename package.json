@@ -24,6 +24,7 @@
   "author": "",
   "license": "MIT",
   "devDependencies": {
+    "app-builder-bin": "^4.2.0",
     "electron": "44.0.0",
     "electron-builder": "^26.15.3"
   },
