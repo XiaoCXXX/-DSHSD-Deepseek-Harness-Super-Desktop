@@ -8,7 +8,7 @@
 // 不再从 GitHub 拉取任何第三方插件。
 //
 // 可通过环境变量覆盖：
-//   DSH_VERSION   要打包的 @deepseek-ai/dsh 版本（默认 0.1.7-rc.2）
+//   DSH_VERSION   要打包的 @deepseek-ai/dsh 版本（默认 0.2.0-rc.2）
 //
 // 注意：上游目前**从未发布过正式版**（没有无后缀的 X.Y.Z），npm 的 latest
 // 标签本身就是一个 rc，所以这里钉的就是 latest 指向的那个版本。
@@ -22,7 +22,7 @@ const { patchDshRoot } = require('./patch-vendor-console')
 const ROOT = path.resolve(__dirname, '..')
 const VENDOR_DSH = path.join(ROOT, 'vendor', 'dsh')
 const VENDOR_PLUGINS = path.join(ROOT, 'vendor', 'plugins')
-const DSH_VERSION = process.env.DSH_VERSION || '0.1.7-rc.2'
+const DSH_VERSION = process.env.DSH_VERSION || '0.2.0-rc.2'
 /**
  * 已被取代的插件名：它们的源码已经不在仓库里，但老版本构建可能把它们留在 vendor/。
  * 留着会被打进安装包并重新启用，用户机器上就会出现两个挂件。

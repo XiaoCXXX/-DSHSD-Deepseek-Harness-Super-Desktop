@@ -45,7 +45,7 @@ of the uninstall entry.
 ### 1.2 Installation procedure
 
 1. Download `DSHSD-Setup-<version>.exe` from [Releases](../../releases). The current version is
-   `1.1.0-dsh0.1.7-rc.2-HF1`.
+   `1.2.0-dsh0.2.0-rc.2`.
 2. Run the installer and follow the prompts. Because the package installs machine-wide, Windows
    requests elevation once; approve it.
 3. The installer creates a **DSHSD** shortcut on the desktop and an uninstall entry in
