@@ -39,7 +39,7 @@ DSH 桌面客户端是 **DeepSeek Harness（DSH）** 的 Windows 桌面宿主程
 
 ### 1.2 安装步骤
 
-1. 从 [Releases](../../releases) 下载 `DSHSD-Setup-<版本>.exe`，当前版本为 `1.1.0-dsh0.2.0-rc.2`。
+1. 从 [Releases](../../releases) 下载 `DSHSD-Setup-<版本>.exe`，当前版本为 `1.2.0-dsh0.2.0-rc.2`。
 2. 运行安装程序并按提示操作。由于安装包为全机器安装，Windows 会请求一次提权，请予批准。
 3. 安装完成后，桌面会创建 **DSHSD** 快捷方式，并在「应用和功能」中登记卸载项。
 
@@ -384,7 +384,8 @@ Node 模式承载 DSH，但它会留在 DSH 进程环境中并被继承。其后
 | 组件 | 许可 | 来源 |
 |---|---|---|
 | [DeepSeek Harness](https://www.npmjs.com/package/@deepseek-ai/dsh)（`@deepseek-ai/dsh` 及其依赖） | MIT | npm，构建时由 `tools/stage-vendor.js` 获取 |
-| [小鲸鱼余额挂件](https://github.com/MeteorNOX/DeepSeek-Balance-Whale-Widget) | MIT © 2026 MeteorNOX | 构建时自上游仓库获取 |
+| [小鲸鱼余额挂件](https://github.com/MeteorNOX/DeepSeek-Balance-Whale-Widget) | MIT © 2026 MeteorNOX | 上游项目；本仓库在其基础上二次开发为随包插件 `dsh-desktop-pet`，源码内嵌于 `plugins/` |
+| [思考强度条](https://github.com/Motuo24/dsh-thinking-slider) | MIT © 2026 Motuo24 | 上游项目；源码内嵌于 `plugins/thinking-slider`，其 `LICENSE` 一并分发 |
 | [Electron](https://github.com/electron/electron) | MIT | npm |
 
 关于小鲸鱼余额挂件：上游采用 **MIT** 协议，明确允许再分发（`publish, distribute, sublicense`），

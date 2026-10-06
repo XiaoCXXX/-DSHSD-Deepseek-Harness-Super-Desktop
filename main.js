@@ -57,8 +57,16 @@ const LEGACY_PLUGIN_NAMES = ['dsh-whale-widget']
 const QUICK_NAME = 'dsh-quick-ask'
 /** 主题包：一次切换同时驱动 DSH 界面的 --dsw-* 令牌与客户端界面。同样在 plugins/ 下。 */
 const THEME_NAME = 'dsh-theme-pack'
+/**
+ * 思考强度条。第三方插件，原作者 **Motuo24**（MIT）：
+ * https://github.com/Motuo24/dsh-thinking-slider
+ * 它把输入区模型座位上的推理档位按钮列表换成可吸附的滑块。源码已内嵌在仓库
+ * plugins/thinking-slider 下（含其 LICENSE），署名同时出现在两个 README 的
+ * 第三方组件表里。
+ */
+const SLIDER_NAME = 'thinking-slider'
 /** 随包分发、每次启动都要确保已启用的插件。 */
-const BUNDLED_PLUGINS = [PET_NAME, QUICK_NAME, THEME_NAME]
+const BUNDLED_PLUGINS = [PET_NAME, QUICK_NAME, THEME_NAME, SLIDER_NAME]
 const OVERLAY_MARGIN = 14
 const DEFAULT_OVERLAY_SIZE = { width: 268, height: 46 }
 
