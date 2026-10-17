@@ -39,7 +39,7 @@ DSH 桌面客户端是 **DeepSeek Harness（DSH）** 的 Windows 桌面宿主程
 
 ### 1.2 安装步骤
 
-1. 从 [Releases](../../releases) 下载 `DSHSD-Setup-<版本>.exe`，当前版本为 `1.2.0-dsh0.2.0-rc.2`。
+1. 从 [Releases](../../releases) 下载 `DSHSD-Setup-<版本>.exe`，当前版本为 `1.2.1-dsh0.2.1-rc.2`。
 2. 运行安装程序并按提示操作。由于安装包为全机器安装，Windows 会请求一次提权，请予批准。
 3. 安装完成后，桌面会创建 **DSHSD** 快捷方式，并在「应用和功能」中登记卸载项。
 
@@ -296,7 +296,7 @@ npm run verify:build # 验证产物：运行打包后的可执行文件并探测
 - `vendor/dsh/` —— 通过 `npm install @deepseek-ai/dsh@<版本>` 安装的 DSH 运行时（约 212 MB）；
 - `vendor/plugins/<名称>/` —— 内置插件，取自本仓库的 `plugins/`。
 
-可用环境变量覆盖默认值：`DSH_VERSION`（默认 `0.1.5-rc.1`）。
+可用环境变量覆盖默认值：`DSH_VERSION`（默认 `0.2.1-rc.2`）。
 
 > **维护者注意。** electron-builder 的过滤器（`app-builder-lib/out/util/filter.js`）会无条件排除
 > 相对路径等于或以 `/node_modules` 结尾的目录，因此整棵 `node_modules` 会被静默地从

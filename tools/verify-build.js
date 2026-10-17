@@ -61,7 +61,7 @@ async function main() {
     ['主程序', APP_EXE],
     ['asar', path.join(UNPACKED, 'resources', 'app.asar')],
     ['随包 DSH', path.join(UNPACKED, 'resources', 'dsh', 'node_modules', '@deepseek-ai', 'dsh', 'lib', 'bin.js')],
-    ['随包挂件', path.join(UNPACKED, 'resources', 'plugins', 'dsh-whale-widget', 'package.json')],
+    ['随包挂件', path.join(UNPACKED, 'resources', 'plugins', 'dsh-desktop-pet', 'package.json')],
   ]
   for (const [label, file] of required) {
     note(fs.existsSync(file), `${label}已打包`, fs.existsSync(file) ? '' : path.relative(ROOT, file))
@@ -122,16 +122,16 @@ async function main() {
   for (let i = 0; i < 90; i++) {
     await sleep(2000)
     if (child.exitCode !== null) break
-    const widget = await request('/dsh-whale/widget.js')
+    const widget = await request('/dsh-pet/widget.js')
     if (widget.status === 200) { ready = true; break }
   }
 
   note(child.exitCode === null, '打包程序保持运行', child.exitCode === null ? '' : `已退出 code=${child.exitCode}`)
   note(ready, `服务在端口 ${PORT} 就绪`)
 
-  const widget = await request('/dsh-whale/widget.js')
-  note(widget.status === 200, '挂件脚本可用', `/dsh-whale/widget.js -> ${widget.status}`)
-  const balance = await request('/dsh-whale/balance.json')
+  const widget = await request('/dsh-pet/widget.js')
+  note(widget.status === 200, '挂件脚本可用', `/dsh-pet/widget.js -> ${widget.status}`)
+  const balance = await request('/dsh-pet/balance.json')
   note(balance.status === 200, '挂件余额接口可用', `${balance.body || ''}`)
   const root = await request('/')
   note(root.status === 401 || root.status === 200, 'DSH 主界面可响应', `GET / -> ${root.status}`)

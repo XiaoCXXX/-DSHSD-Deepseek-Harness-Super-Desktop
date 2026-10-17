@@ -1,0 +1,14 @@
+# Bundle self-activation patch.
+#
+# `dsh-app-boot` requires every entry in `dsh.profile.bundles` to resolve to a
+# package whose manifest declares `dsh.bundle`; without this file the loader
+# throws `declares no dsh.bundle in its package.json` and skips the whole
+# bundle, so the plugin silently never mounts.
+#
+# The node half is intentionally inert (`lib/index.js` exports an empty
+# `apply`); this row exists so the Loader has something to mount, and the
+# browser half is discovered from the `dsh.client` declaration in
+# package.json (exports["./client"]).
+- insert:
+    - id: thinking-slider
+      name: thinking-slider

@@ -45,7 +45,7 @@ of the uninstall entry.
 ### 1.2 Installation procedure
 
 1. Download `DSHSD-Setup-<version>.exe` from [Releases](../../releases). The current version is
-   `1.2.0-dsh0.2.0-rc.2`.
+   `1.2.1-dsh0.2.1-rc.2`.
 2. Run the installer and follow the prompts. Because the package installs machine-wide, Windows
    requests elevation once; approve it.
 3. The installer creates a **DSHSD** shortcut on the desktop and an uninstall entry in
@@ -335,7 +335,7 @@ Vendor staging is performed by `tools/stage-vendor.js`:
   212 MB);
 - `vendor/plugins/<name>/` — the bundled plugins, taken from `plugins/` in this repository.
 
-Two environment variables override the defaults: `DSH_VERSION` (default `0.1.5-rc.1`).
+Two environment variables override the defaults: `DSH_VERSION` (default `0.2.1-rc.2`).
 
 > **Maintainer note.** electron-builder's filter (`app-builder-lib/out/util/filter.js`)
 > unconditionally excludes any directory whose relative path is, or ends with, `/node_modules`, so an
