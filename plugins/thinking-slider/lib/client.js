@@ -59,7 +59,7 @@ window.__ModuleLoader__.load({
 .ths-trigger:focus-visible{box-shadow:0 0 0 2px var(--dsw-alias-border-l3)}
 .ths-trigger:disabled{color:var(--dsw-alias-label-dimmed);cursor:default}
 .ths-triggerLabel{text-overflow:ellipsis;white-space:nowrap;min-width:0;overflow:hidden}
-.ths-triggerEffort{color:var(--dsw-alias-label-caption);flex:none}
+.ths-triggerEffort{color:#4a9eff;flex:none}
 .ths-chevron{color:var(--dsw-alias-label-caption);flex:none;transition:transform .12s;display:flex}
 .ths-chevronOpen{transform:rotate(180deg)}
 .ths-menu{z-index:20;border:1px solid var(--dsw-alias-border-inverted);background:var(--dsw-specific-menu);width:min(280px,100vw - 32px);max-height:min(440px,100vh - 96px);box-shadow:var(--dsw-shadow-lv3);color:var(--dsw-alias-label-primary);--dsh-scrollbar-thumb:var(--dsw-alias-scrollbar-bg-l2);--dsh-scrollbar-thumb-hover:var(--dsw-alias-scrollbar-hover-l2);border-radius:12px;flex-direction:column;padding:4px;display:flex;position:absolute;bottom:calc(100% + 8px);right:0;overflow:hidden}
@@ -72,6 +72,10 @@ window.__ModuleLoader__.load({
 .ths-cell:focus-visible{outline:2px solid var(--dsw-alias-border-l3);outline-offset:-2px}
 .ths-cellLabel{flex:1;color:var(--dsw-alias-label-primary)}
 .ths-cellValue{color:var(--dsw-alias-label-caption);text-overflow:ellipsis;white-space:nowrap;max-width:110px;overflow:hidden}
+.ths-cellValueAccent{color:#4a9eff}
+.ths-releaseBadge{display:inline-flex;align-items:center;margin-left:4px;padding:0 5px;height:16px;border-radius:4px;font-size:10px;font-weight:600;line-height:16px;color:#4a9eff;background:rgba(74,158,255,.15);vertical-align:baseline}
+.ths-triggerEffortRunnerUp{color:#a97bff}
+.ths-triggerEffortTop{background-image:linear-gradient(90deg,#4a9eff 0%,#a97bff 25%,#ff7ac0 50%,#a97bff 75%,#4a9eff 100%);background-size:200% 100%;animation:ths-topFlow 1.5s linear infinite;-webkit-background-clip:text;background-clip:text;-webkit-text-fill-color:transparent;color:transparent}
 .ths-cellChevron{color:var(--dsw-alias-label-caption);flex:none;display:flex}
 .ths-groups{overflow:auto;flex:1;min-height:0}
 .ths-group{padding:2px 0 6px}
@@ -133,7 +137,7 @@ window.__ModuleLoader__.load({
 @keyframes ths-sweep{0%{opacity:0;transform:translateX(-120%)}20%{opacity:1}100%{opacity:0;transform:translateX(320%)}}
 .ths-panePulse{animation:ths-paneFlash .8s ease-out}
 @keyframes ths-paneFlash{0%{box-shadow:inset 0 0 0 0 rgba(120,150,255,0)}30%{box-shadow:inset 0 0 22px 0 rgba(120,150,255,.28)}100%{box-shadow:inset 0 0 0 0 rgba(120,150,255,0)}}
-@media (prefers-reduced-motion:reduce){.ths-fillTop,.ths-thumbTop,.ths-panePulse,.ths-topSweep{animation:none;box-shadow:none}.ths-burst,.ths-burstRing,.ths-burstSweep{display:none}}
+@media (prefers-reduced-motion:reduce){.ths-fillTop,.ths-thumbTop,.ths-panePulse,.ths-topSweep,.ths-triggerEffortTop{animation:none;box-shadow:none}.ths-burst,.ths-burstRing,.ths-burstSweep{display:none}}
 `;
 		const tagId = "thinking-slider/thinking-slider.module.css";
 		if (typeof document !== "undefined" && document.querySelector("style[data-plugin-css=" + JSON.stringify(tagId) + "]") === null) {
@@ -165,6 +169,8 @@ window.__ModuleLoader__.load({
 		//#region ModelSeatSlider
 		function ModelSeatSlider(props) {
 			const { locked, available, directory, load, select, t } = props;
+			// 官方模型标签（1017 徽标）注册在子 slot 上；替换座位后由我们代为渲染。
+			const renderSlot = typeof props.renderSlot === 'function' ? props.renderSlot : undefined;
 			const state = React.useSyncExternalStore((fn) => directory.subscribe(fn), () => directory.getSnapshot());
 			const [open, setOpen] = React.useState(false);
 			const [pane, setPane] = React.useState('root');
@@ -257,10 +263,38 @@ window.__ModuleLoader__.load({
 			const atRunnerUp = count > 0 && topIndex > 1 && activeIndex === topIndex - 1;
 			const fillClass = atTop ? ' ths-fillTop' : atRunnerUp ? ' ths-fillRunnerUp' : '';
 			const thumbClass = atTop ? ' ths-thumbTop' : atRunnerUp ? ' ths-thumbRunnerUp' : '';
+			// 强度字样跟随档位：次顶紫、最高走流动渐变，其余保持蓝色。
+			const effortClass = atTop ? ' ths-triggerEffortTop' : atRunnerUp ? ' ths-triggerEffortRunnerUp' : '';
 			const modelLabel = currentChoice?.model.name ?? t('trigger.fallback');
 			const shownEffortLabel = currentEffort !== undefined ? currentEffort.label : effortLabel;
 			const triggerLabel = shownEffortLabel === undefined ? modelLabel : modelLabel + ' · ' + shownEffortLabel;
 			const triggerAria = currentChoice === undefined ? t('trigger.selectAria') : shownEffortLabel === undefined ? t('trigger.aria', { model: modelLabel }) : t('trigger.ariaEffort', { model: modelLabel, effort: shownEffortLabel });
+
+			// 渲染官方 `conversation.input.model.label` 子 slot；拿不到渲染器时，
+			// 用与官方包一致的判定内联画出 1017 徽标，保证标签始终可见。
+			const renderModelLabel = (group, model, placement, selected) => {
+				const fallback = model?.name ?? '';
+				if (renderSlot !== undefined) {
+					try {
+						const slotted = renderSlot('conversation.input.model.label', {
+							provider: { id: group.id, name: group.name },
+							model,
+							placement,
+							selected
+						}, { fallback });
+						if (slotted !== undefined && slotted !== null && typeof slotted !== 'string') return slotted;
+					} catch {
+						// 子 slot 不可用也不能让模型座位崩掉。
+					}
+				}
+				const official = group.id === 'deepseek-official' || group.id === 'deepseek-account';
+				if (official && model.id === 'deepseek-flash' && model.name === 'DeepSeek-V4.1-Flash') {
+					return React.createElement(React.Fragment, null,
+						model.name,
+						React.createElement('span', { className: 'ths-releaseBadge' }, '1017'));
+				}
+				return fallback;
+			};
 
 			React.useEffect(() => {
 				if (available) {
@@ -467,8 +501,8 @@ window.__ModuleLoader__.load({
 					disabled: locked,
 					onClick: () => { if (open) close(); else show(); }
 				}, [
-					React.createElement('span', { key: 'label', className: 'ths-triggerLabel' }, modelLabel),
-					shownEffortLabel !== undefined && React.createElement('span', { key: 'effort', className: 'ths-triggerEffort' }, shownEffortLabel),
+					React.createElement('span', { key: 'label', className: 'ths-triggerLabel' }, currentChoice !== undefined ? renderModelLabel(currentChoice.group, currentChoice.model, 'trigger', true) : modelLabel),
+					shownEffortLabel !== undefined && React.createElement('span', { key: 'effort', className: 'ths-triggerEffort' + effortClass }, shownEffortLabel),
 					React.createElement('span', { key: 'chevron', className: 'ths-chevron' + (open ? ' ths-chevronOpen' : '') }, React.createElement(IconChevronDown, {}))
 				]),
 				open && React.createElement('div', {
@@ -489,7 +523,7 @@ window.__ModuleLoader__.load({
 							onClick: () => setPane('model')
 						}, [
 							React.createElement('span', { key: 'l', className: 'ths-cellLabel' }, t('menu.model')),
-							React.createElement('span', { key: 'v', className: 'ths-cellValue' }, modelLabel),
+							React.createElement('span', { key: 'v', className: 'ths-cellValue' }, currentChoice !== undefined ? renderModelLabel(currentChoice.group, currentChoice.model, 'menu', true) : modelLabel),
 							React.createElement('span', { key: 'c', className: 'ths-cellChevron' }, React.createElement(IconChevronRight, {}))
 						]),
 						effortChoices.length > 0 && React.createElement('button', {
@@ -501,7 +535,7 @@ window.__ModuleLoader__.load({
 							onClick: () => { setSelectError(null); setPane('effort'); }
 						}, [
 							React.createElement('span', { key: 'l', className: 'ths-cellLabel' }, t('menu.effort')),
-							React.createElement('span', { key: 'v', className: 'ths-cellValue' }, shownEffortLabel),
+							React.createElement('span', { key: 'v', className: 'ths-cellValue ths-cellValueAccent' + effortClass }, shownEffortLabel),
 							React.createElement('span', { key: 'c', className: 'ths-cellChevron' }, React.createElement(IconChevronRight, {}))
 						])
 					]),
@@ -533,7 +567,7 @@ window.__ModuleLoader__.load({
 										onClick: () => choose({ provider: group.id, model: model.id })
 									}, [
 										React.createElement('span', { key: 'copy', className: 'ths-optionCopy' }, [
-											React.createElement('span', { key: 'n', className: 'ths-modelName' }, model.name),
+											React.createElement('span', { key: 'n', className: 'ths-modelName' }, renderModelLabel(group, model, 'option', selected)),
 											model.description !== undefined && React.createElement('span', { key: 'd', className: 'ths-description' }, model.description)
 										]),
 										React.createElement('span', { key: 'check', className: 'ths-check' }, selected ? React.createElement(IconCheck, {}) : null)
