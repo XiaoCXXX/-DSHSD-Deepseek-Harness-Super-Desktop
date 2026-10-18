@@ -39,7 +39,7 @@ DSH 桌面客户端是 **DeepSeek Harness（DSH）** 的 Windows 桌面宿主程
 
 ### 1.2 安装步骤
 
-1. 从 [Releases](../../releases) 下载 `DSHSD-Setup-<版本>.exe`，当前版本为 `1.3.1-dsh0.2.1-rc.2`。
+1. 从 [Releases](../../releases) 下载 `DSHSD-Setup-<版本>.exe`，当前版本为 `1.4.0-dsh0.2.1-rc.2`。
 2. 运行安装程序并按提示操作。由于安装包为全机器安装，Windows 会请求一次提权，请予批准。
 3. 安装完成后，桌面会创建 **DSHSD** 快捷方式，并在「应用和功能」中登记卸载项。
 
@@ -409,6 +409,7 @@ Node 模式承载 DSH，但它会留在 DSH 进程环境中并被继承。其后
 | [DeepSeek Harness](https://www.npmjs.com/package/@deepseek-ai/dsh)（`@deepseek-ai/dsh` 及其依赖） | MIT | npm，构建时由 `tools/stage-vendor.js` 获取 |
 | [小鲸鱼余额挂件](https://github.com/MeteorNOX/DeepSeek-Balance-Whale-Widget) | MIT © 2026 MeteorNOX | 上游项目；本仓库在其基础上二次开发为随包插件 `dsh-desktop-pet`，源码内嵌于 `plugins/` |
 | [思考强度条](https://github.com/Motuo24/dsh-thinking-slider) | MIT © 2026 Motuo24 | 上游项目，已合并进随包的 `dsh-enhanced-model-support` 座位；其 `LICENSE` 以 `LICENSE-thinking-slider` 一并分发 |
+| [订阅模型提供方](https://github.com/V1ki/dsh-plugin-subscriptions) | MIT © 2026 V1ki | 源码内嵌于 `plugins/dsh-plugin-subscriptions`；peer 范围已放宽以适配 DSH 0.2.1-rc.2（对应上游 PR #156） |
 | [Electron](https://github.com/electron/electron) | MIT | npm |
 
 关于小鲸鱼余额挂件：上游采用 **MIT** 协议，明确允许再分发（`publish, distribute, sublicense`），

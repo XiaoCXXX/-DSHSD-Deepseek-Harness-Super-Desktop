@@ -69,8 +69,18 @@ const THEME_NAME = 'dsh-theme-pack'
  * LEGACY_PLUGIN_NAMES，升级时会被摘除。
  */
 const ENHANCED_NAME = 'dsh-enhanced-model-support'
+/**
+ * 订阅模型提供方：ChatGPT/Codex、Claude、Grok、GitHub Copilot、Google Antigravity。
+ *
+ * 第三方插件，原作者 **V1ki**（MIT）：
+ * https://github.com/V1ki/dsh-plugin-subscriptions
+ * 源码内嵌在仓库 plugins/dsh-plugin-subscriptions 下（含其 LICENSE，以及它唯一的
+ * 运行时依赖 undici）。内置的是把 peer 范围放宽到 0.2.1-rc.2 的构建，对应上游
+ * PR #156；上游合入后可以换回官方发行版。
+ */
+const SUBSCRIPTIONS_NAME = 'dsh-plugin-subscriptions'
 /** 随包分发、每次启动都要确保已启用的插件。 */
-const BUNDLED_PLUGINS = [PET_NAME, QUICK_NAME, THEME_NAME, ENHANCED_NAME]
+const BUNDLED_PLUGINS = [PET_NAME, QUICK_NAME, THEME_NAME, ENHANCED_NAME, SUBSCRIPTIONS_NAME]
 const OVERLAY_MARGIN = 14
 const DEFAULT_OVERLAY_SIZE = { width: 268, height: 46 }
 

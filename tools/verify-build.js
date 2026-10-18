@@ -133,7 +133,14 @@ async function main() {
   note(widget.status === 200, '挂件脚本可用', `/dsh-pet/widget.js -> ${widget.status}`)
   const balance = await request('/dsh-pet/balance.json')
   note(balance.status === 200, '挂件余额接口可用', `${balance.body || ''}`)
-  const root = await request('/')
+  // 挂件路由由客户端自己的 server 注册，比 Web UI 的 SPA 路由早得多：
+  // 订阅插件启动时要刷新模型目录，UI 挂载会被拖后。所以这里必须重试，
+  // 否则拿到的是「服务器已就绪但 UI 还没挂上」的 404，误判成回归。
+  let root = await request('/')
+  for (let i = 0; i < 15 && root.status === 404; i++) {
+    await sleep(2000)
+    root = await request('/')
+  }
   note(root.status === 401 || root.status === 200, 'DSH 主界面可响应', `GET / -> ${root.status}`)
 
   // ---------- 5. 确认使用的是随包运行时

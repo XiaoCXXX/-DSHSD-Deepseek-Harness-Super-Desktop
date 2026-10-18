@@ -154,6 +154,116 @@ function ensureOwnPlugins() {
   }
 }
 
+/** 用 node 直接跑 npm-cli，避免在无控制台宿主里每次调用都弹出一个 cmd 窗口。 */
+function runNpm(args, options = {}) {
+  const npmCli = [
+    path.join(path.dirname(process.execPath), 'node_modules', 'npm', 'bin', 'npm-cli.js'),
+    path.join(path.dirname(process.execPath), '..', 'lib', 'node_modules', 'npm', 'bin', 'npm-cli.js'),
+  ].find((candidate) => fs.existsSync(candidate))
+  if (npmCli) execFileSync(process.execPath, [npmCli, ...args], { stdio: 'inherit', ...options })
+  else execFileSync('npm', args, { stdio: 'inherit', shell: true, ...options })
+}
+
+/** 删掉插件目录里运行时不用的文件：sourcemap、类型声明、文档、测试。 */
+function prunePluginTree(root) {
+  const walk = (dir) => {
+    for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
+      const full = path.join(dir, entry.name)
+      if (entry.isDirectory()) {
+        if (/[\\/](test|tests|__tests__|spec)[\\/]/i.test(full + path.sep)) {
+          fs.rmSync(full, { recursive: true, force: true })
+          continue
+        }
+        walk(full)
+        continue
+      }
+      if (!entry.isFile()) continue
+      // LICENSE 这类文档必须保留，否则 MIT 的分发义务就断了
+      if (/^(license|licence|copying|notice)/i.test(entry.name)) continue
+      if (/\.(map|d\.ts|md|markdown)$/i.test(entry.name)) {
+        try { fs.rmSync(full, { force: true }) } catch { /* 只读文件跳过 */ }
+      }
+    }
+  }
+  walk(root)
+}
+
+/**
+ * 订阅模型提供方（第三方，MIT，© V1ki）。
+ *
+ * 它通过 `ctx.llm.registerAdapter` 注册 ChatGPT/Codex、Claude、Grok、GitHub Copilot、
+ * Google Antigravity 五家订阅提供方，装好后模型菜单里就能直接选订阅模型。
+ *
+ * 为什么构建时才从 npm 取、而不是把源码放进 plugins/ 提交：
+ * 它的 Antigravity 客户端里带着**上游硬编码的 Google OAuth 凭据**，提交会把第三方
+ * 密钥写进 git 历史，GitHub 的密钥扫描会直接拒绝推送。所以沿用 vendor/dsh 的模式：
+ * 只在构建机下载进 vendor/（已 gitignore），仓库里不留密钥。
+ *
+ * 下载后做三件事：把 peer 范围放宽到当前内核（对应上游 PR #156）、把唯一运行时依赖
+ * undici 嵌套进插件目录（Node 无需包管理器即可解析）、裁掉运行时不用的文件。
+ */
+const SUBSCRIPTIONS_VERSION = process.env.SUBSCRIPTIONS_VERSION || '0.9.9'
+const SUBSCRIPTIONS_UNDICI_VERSION = process.env.SUBSCRIPTIONS_UNDICI_VERSION || '7.30.0'
+const SUBSCRIPTIONS_DIR = path.join(VENDOR_PLUGINS, 'dsh-plugin-subscriptions')
+const SUBSCRIPTIONS_MARKER = path.join(SUBSCRIPTIONS_DIR, '.staged.json')
+
+function ensureSubscriptions() {
+  if (fs.existsSync(SUBSCRIPTIONS_MARKER)) {
+    try {
+      const marker = JSON.parse(fs.readFileSync(SUBSCRIPTIONS_MARKER, 'utf8'))
+      if (marker.version === SUBSCRIPTIONS_VERSION
+        && marker.undici === SUBSCRIPTIONS_UNDICI_VERSION
+        && marker.dsh === DSH_VERSION
+        && fs.existsSync(path.join(SUBSCRIPTIONS_DIR, 'lib', 'index.js'))) {
+        log(`订阅插件已就绪：dsh-plugin-subscriptions@${marker.version}（undici ${marker.undici}）`)
+        return
+      }
+    } catch {
+      // 标记损坏就当作未就绪，重新下载
+    }
+  }
+
+  const staging = fs.mkdtempSync(path.join(os.tmpdir(), 'dsh-subs-'))
+  try {
+    fs.rmSync(SUBSCRIPTIONS_DIR, { recursive: true, force: true })
+    fs.mkdirSync(SUBSCRIPTIONS_DIR, { recursive: true })
+
+    log(`下载 dsh-plugin-subscriptions@${SUBSCRIPTIONS_VERSION} 与 undici@${SUBSCRIPTIONS_UNDICI_VERSION}（首次较慢）`)
+    runNpm(['pack', `dsh-plugin-subscriptions@${SUBSCRIPTIONS_VERSION}`, `undici@${SUBSCRIPTIONS_UNDICI_VERSION}`, '--pack-destination', staging, '--silent'])
+
+    const tarballs = fs.readdirSync(staging).filter((name) => name.endsWith('.tgz'))
+    const pluginTarball = tarballs.find((name) => name.startsWith('dsh-plugin-subscriptions-'))
+    const undiciTarball = tarballs.find((name) => name.startsWith('undici-'))
+    if (pluginTarball === undefined || undiciTarball === undefined) {
+      throw new Error(`npm pack 未产出预期 tarball：${tarballs.join(', ') || '(空)'}`)
+    }
+
+    execFileSync('tar', ['-xzf', path.join(staging, pluginTarball), '-C', SUBSCRIPTIONS_DIR, '--strip-components=1'], { stdio: 'inherit' })
+    const undiciDir = path.join(SUBSCRIPTIONS_DIR, 'node_modules', 'undici')
+    fs.mkdirSync(undiciDir, { recursive: true })
+    execFileSync('tar', ['-xzf', path.join(staging, undiciTarball), '-C', undiciDir, '--strip-components=1'], { stdio: 'inherit' })
+
+    // 放宽 peer 范围：上游发行版的区间止于 0.2.0-rc.2，dsh-app-boot 会因此跳过整包
+    const manifestPath = path.join(SUBSCRIPTIONS_DIR, 'package.json')
+    const manifest = JSON.parse(fs.readFileSync(manifestPath, 'utf8'))
+    let widened = 0
+    for (const name of Object.keys(manifest.peerDependencies || {})) {
+      if (!name.startsWith('@deepseek-ai/')) continue
+      const range = manifest.peerDependencies[name]
+      if (range.includes(DSH_VERSION)) continue
+      manifest.peerDependencies[name] = `${range} || ${DSH_VERSION}`
+      widened += 1
+    }
+    fs.writeFileSync(manifestPath, `${JSON.stringify(manifest, null, 2)}\n`, 'utf8')
+
+    prunePluginTree(SUBSCRIPTIONS_DIR)
+    fs.writeFileSync(SUBSCRIPTIONS_MARKER, `${JSON.stringify({ version: SUBSCRIPTIONS_VERSION, undici: SUBSCRIPTIONS_UNDICI_VERSION, dsh: DSH_VERSION }, null, 2)}\n`, 'utf8')
+    log(`已准备订阅插件：dsh-plugin-subscriptions@${SUBSCRIPTIONS_VERSION}（放宽 ${widened} 条 peer 范围）`)
+  } finally {
+    fs.rmSync(staging, { recursive: true, force: true })
+  }
+}
+
 /**
  * 删掉随包内核里运行时用不到的文件。
  *
@@ -260,6 +370,7 @@ try {
   pruneVendorDsh()
   removeLegacyVendored()
   ensureOwnPlugins()
+  ensureSubscriptions()
   log('物料准备完成')
 } catch (error) {
   console.error(`[stage] 失败：${error.message}`)
