@@ -1,5 +1,5 @@
 window.__ModuleLoader__.load({
-	id: "thinking-slider",
+	id: "dsh-enhanced-model-support",
 	factory: (require) => {
 		var module = { exports: {} };
 		var exports = module.exports;
@@ -11,6 +11,20 @@ window.__ModuleLoader__.load({
 		const NS = 'model-slider';
 
 		const zh = {
+			'usage.title': '订阅用量',
+			'usage.refresh': '刷新',
+			'usage.loading': '读取中…',
+			'usage.empty': '没有已登录的订阅账号。',
+			'usage.missing': '未检测到订阅插件（dsh-plugin-subscriptions）。',
+			'usage.unsupported': '该厂商不提供用量接口。',
+			'usage.error': '读取失败：{message}',
+			'usage.plan': '套餐：{plan}',
+			'usage.resetCredits': '可用重置 {count} 次',
+			'usage.windowSession': '5 小时窗口',
+			'usage.windowWeekly': '每周窗口',
+			'usage.windowOther': '其他窗口',
+			'usage.resetsIn': '{time} 后重置',
+			'usage.now': '即将重置',
 			'trigger.fallback': '选择模型',
 			'trigger.selectAria': '选择模型',
 			'trigger.aria': '选择模型，当前 {model}',
@@ -31,6 +45,20 @@ window.__ModuleLoader__.load({
 		};
 
 		const en = {
+			'usage.title': 'Subscription usage',
+			'usage.refresh': 'Refresh',
+			'usage.loading': 'Reading…',
+			'usage.empty': 'No subscription accounts are logged in.',
+			'usage.missing': 'The subscriptions plugin (dsh-plugin-subscriptions) was not found.',
+			'usage.unsupported': 'This provider exposes no usage endpoint.',
+			'usage.error': 'Failed to read usage: {message}',
+			'usage.plan': 'Plan: {plan}',
+			'usage.resetCredits': '{count} resets available',
+			'usage.windowSession': '5-hour window',
+			'usage.windowWeekly': 'Weekly window',
+			'usage.windowOther': 'Other window',
+			'usage.resetsIn': 'Resets in {time}',
+			'usage.now': 'Resetting shortly',
 			'trigger.fallback': 'Select model',
 			'trigger.selectAria': 'Select model',
 			'trigger.aria': 'Select model, current {model}',
@@ -75,6 +103,27 @@ window.__ModuleLoader__.load({
 .ths-cellValueAccent{color:#4a9eff}
 .ths-releaseBadge{display:inline-flex;align-items:center;margin-left:4px;padding:0 5px;height:16px;border-radius:4px;font-size:10px;font-weight:600;line-height:16px;color:#4a9eff;background:rgba(74,158,255,.15);vertical-align:baseline}
 .ths-menuSlot{margin-top:2px;padding-top:4px;border-top:1px solid var(--dsw-alias-border-l3);max-height:240px;overflow:auto}
+.ths-usageSlot{margin-top:2px;padding-top:4px;border-top:1px solid var(--dsw-alias-border-l3);max-height:240px;overflow:auto}
+.dsu-root{display:flex;flex-direction:column;gap:2px;padding:4px 8px 2px}
+.dsu-head{display:flex;align-items:center;gap:8px;padding:0 0 2px}
+.dsu-title{flex:1;font-size:12px;font-weight:600;color:var(--dsw-alias-label-primary)}
+.dsu-refresh{border:none;background:0 0;color:var(--dsw-alias-label-caption);font-size:11px;cursor:pointer;padding:2px 6px;border-radius:6px}
+.dsu-refresh:hover{background:var(--dsw-alias-interactive-bg-hover)}
+.dsu-refresh:disabled{cursor:default;opacity:.5}
+.dsu-section{padding:6px 0;border-top:1px solid var(--dsw-alias-border-l3)}
+.dsu-section:first-of-type{border-top:none}
+.dsu-provider{display:flex;align-items:baseline;gap:6px;font-size:12px;font-weight:600;color:var(--dsw-alias-label-primary)}
+.dsu-account{font-weight:400;color:var(--dsw-alias-label-caption);font-size:11px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.dsu-plan{margin-top:2px;font-size:11px;color:var(--dsw-alias-label-caption)}
+.dsu-window{margin-top:6px}
+.dsu-windowHead{display:flex;align-items:baseline;gap:6px;font-size:12px;line-height:16px}
+.dsu-windowLabel{flex:1;color:var(--dsw-alias-label-secondary)}
+.dsu-windowValue{font-variant-numeric:tabular-nums;color:var(--dsw-alias-label-primary);font-weight:600}
+.dsu-track{margin-top:3px;height:5px;border-radius:999px;background:color-mix(in srgb,var(--dsw-alias-label-primary) 12%,transparent);overflow:hidden}
+.dsu-fill{height:100%;border-radius:999px;transition:width .2s ease-out}
+.dsu-meta{margin-top:2px;font-size:11px;line-height:15px;color:var(--dsw-alias-label-caption)}
+.dsu-error{margin-top:4px;font-size:11px;line-height:15px;color:var(--dsw-alias-state-error-primary)}
+.dsu-muted{font-size:12px;line-height:18px;color:var(--dsw-alias-label-caption);padding:2px 0}
 .ths-triggerEffortRunnerUp{color:#a97bff}
 .ths-triggerEffortTop{background-image:linear-gradient(90deg,#4a9eff 0%,#a97bff 25%,#ff7ac0 50%,#a97bff 75%,#4a9eff 100%);background-size:200% 100%;animation:ths-topFlow 1.5s linear infinite;-webkit-background-clip:text;background-clip:text;-webkit-text-fill-color:transparent;color:transparent}
 .ths-cellChevron{color:var(--dsw-alias-label-caption);flex:none;display:flex}
@@ -167,9 +216,219 @@ window.__ModuleLoader__.load({
 		}
 		//#endregion
 
+				//#region usage
+		/** Subscription providers surfaced by dsh-plugin-subscriptions, in display order. */
+		const USAGE_PROVIDERS = [
+			{ id: 'codex', name: 'ChatGPT / Codex' },
+			{ id: 'claude', name: 'Claude' },
+			{ id: 'grok', name: 'Grok' },
+			{ id: 'copilot', name: 'GitHub Copilot' },
+			{ id: 'antigravity', name: 'Google Antigravity' }
+		];
+
+		/** Shared `/api` channel + endpoint prefix the subscriptions node half mounts. */
+		const USAGE_RPC_CHANNEL = '/api';
+		const USAGE_RPC_PREFIX = 'subscriptions-auth.';
+
+		/** Read one `subscriptions-auth` endpoint and unwrap the business value. */
+		async function callUsageRpc(rpc, endpoint, payload) {
+			const result = await rpc.call(USAGE_RPC_CHANNEL, USAGE_RPC_PREFIX + endpoint, payload || {});
+			if (!result || result.ok !== true) {
+				const message = result && result.error && result.error.message ? result.error.message : 'unknown error';
+				throw new Error(message);
+			}
+			return result.value;
+		}
+
+		/** Human text of an unknown thrown value. */
+		function usageMessageOf(error) {
+			if (error === null || error === undefined) return 'unknown error';
+			if (typeof error === 'string') return error;
+			if (typeof error.message === 'string') return error.message;
+			return String(error);
+		}
+
+		/** Bar colour by consumption, mirroring the subscriptions plugin's thresholds. */
+		function usageBarColor(usedPercent) {
+			if (usedPercent >= 95) return 'var(--dsw-alias-state-error-primary, #e5484d)';
+			if (usedPercent >= 80) return 'var(--dsw-alias-state-warn-label, #f5a524)';
+			return 'var(--dsw-alias-state-success-primary, #30a46c)';
+		}
+
+		/** Compact duration until a reset instant. */
+		function usageDelay(t, resetsAt) {
+			const ms = resetsAt - Date.now();
+			if (!Number.isFinite(ms) || ms <= 0) return t('usage.now');
+			const minutes = Math.floor(ms / 60000);
+			const days = Math.floor(minutes / 1440);
+			const hours = Math.floor((minutes % 1440) / 60);
+			const mins = minutes % 60;
+			if (days > 0) return days + 'd ' + hours + 'h';
+			if (hours > 0) return hours + 'h ' + mins + 'm';
+			return Math.max(1, mins) + 'm';
+		}
+
+		/** Label of one usage window, honouring the provider's model scope. */
+		function usageWindowLabel(t, window) {
+			const base = window.kind === 'session' ? t('usage.windowSession') : window.kind === 'weekly' ? t('usage.windowWeekly') : t('usage.windowOther');
+			return window.scope ? base + ' · ' + window.scope : base;
+		}
+
+		/** Whether the status answer contains at least one logged-in account. */
+		function usageAccountCount(statusValue) {
+			const providers = statusValue && statusValue.providers ? statusValue.providers : {};
+			let count = 0;
+			for (const provider of USAGE_PROVIDERS) {
+				const entry = providers[provider.id];
+				if (entry && Array.isArray(entry.accounts)) count += entry.accounts.length;
+			}
+			return count;
+		}
+
+		/**
+		 * Subscription usage block rendered inside the model menu, below the model
+		 * and thinking-strength rows. Renders nothing unless at least one
+		 * subscription account is logged in.
+		 */
+		function UsageSection(props) {
+			const { rpc, t } = props;
+			const [probe, setProbe] = React.useState('loading');
+			const [rows, setRows] = React.useState([]);
+			const [loading, setLoading] = React.useState(false);
+			const [error, setError] = React.useState(undefined);
+			const sequence = React.useRef(0);
+
+			const load = React.useCallback(async (force) => {
+				const token = ++sequence.current;
+				setLoading(true);
+				setError(undefined);
+				try {
+					const statusValue = await callUsageRpc(rpc, 'status', {});
+					const providers = statusValue && statusValue.providers ? statusValue.providers : {};
+					const next = [];
+					for (const provider of USAGE_PROVIDERS) {
+						const entry = providers[provider.id];
+						const accounts = entry && Array.isArray(entry.accounts) ? entry.accounts : [];
+						for (const account of accounts) {
+							let usage;
+							let failure;
+							try {
+								usage = await callUsageRpc(rpc, 'usage', {
+									provider: provider.id,
+									account: account.key,
+									...(force ? { force: true } : {})
+								});
+							} catch (cause) {
+								failure = usageMessageOf(cause);
+							}
+							next.push({ provider, account, usage, failure });
+						}
+					}
+					if (token === sequence.current) {
+						setRows(next);
+						setProbe(next.length > 0 ? 'yes' : 'no');
+					}
+				} catch (cause) {
+					if (token === sequence.current) {
+						setRows([]);
+						setError(usageMessageOf(cause));
+					}
+				} finally {
+					if (token === sequence.current) setLoading(false);
+				}
+			}, [rpc]);
+
+			React.useEffect(() => {
+				let alive = true;
+				(async () => {
+					try {
+						const statusValue = await callUsageRpc(rpc, 'status', {});
+						if (alive) {
+							const count = usageAccountCount(statusValue);
+							setProbe(count > 0 ? 'yes' : 'no');
+							if (count > 0) void load(false);
+						}
+					} catch {
+						if (alive) setProbe('no');
+					}
+				})();
+				return () => { alive = false; };
+			}, [rpc, load]);
+
+			if (probe !== 'yes') return null;
+
+			const children = [
+				React.createElement('div', { key: 'head', className: 'dsu-head' }, [
+					React.createElement('span', { key: 'title', className: 'dsu-title' }, t('usage.title')),
+					React.createElement('button', {
+						key: 'refresh',
+						type: 'button',
+						className: 'dsu-refresh',
+						disabled: loading,
+						onClick: () => { void load(true); }
+					}, t('usage.refresh'))
+				])
+			];
+
+			if (error !== undefined) {
+				children.push(React.createElement('div', { key: 'error', className: 'dsu-section' }, [
+					React.createElement('div', { key: 'm', className: 'dsu-error' }, t('usage.error', { message: error })),
+					React.createElement('div', { key: 'h', className: 'dsu-muted' }, t('usage.missing'))
+				]));
+			} else if (loading && rows.length === 0) {
+				children.push(React.createElement('div', { key: 'loading', className: 'dsu-section dsu-muted' }, t('usage.loading')));
+			} else if (rows.length === 0) {
+				children.push(React.createElement('div', { key: 'empty', className: 'dsu-section dsu-muted' }, t('usage.empty')));
+			} else {
+				rows.forEach((row, index) => {
+					const section = [
+						React.createElement('div', { key: 'p', className: 'dsu-provider' }, [
+							React.createElement('span', { key: 'name' }, row.provider.name),
+							React.createElement('span', { key: 'acct', className: 'dsu-account' }, row.account.account || row.account.key)
+						])
+					];
+					if (row.usage && row.usage.plan) {
+						section.push(React.createElement('div', { key: 'plan', className: 'dsu-plan' }, t('usage.plan', { plan: row.usage.plan })));
+					}
+					if (row.failure !== undefined) {
+						section.push(React.createElement('div', { key: 'err', className: 'dsu-error' }, t('usage.error', { message: row.failure })));
+					} else if (row.usage && row.usage.supported === false) {
+						section.push(React.createElement('div', { key: 'unsupported', className: 'dsu-muted' }, t('usage.unsupported')));
+					} else if (row.usage && Array.isArray(row.usage.windows)) {
+						row.usage.windows.forEach((window, windowIndex) => {
+							const percent = Math.min(100, Math.max(0, Number(window.usedPercent) || 0));
+							section.push(React.createElement('div', { key: 'w' + windowIndex, className: 'dsu-window' }, [
+								React.createElement('div', { key: 'head', className: 'dsu-windowHead' }, [
+									React.createElement('span', { key: 'label', className: 'dsu-windowLabel' }, usageWindowLabel(t, window)),
+									React.createElement('span', { key: 'value', className: 'dsu-windowValue' }, Math.round(percent) + '%')
+								]),
+								React.createElement('div', { key: 'track', className: 'dsu-track' },
+									React.createElement('div', {
+										className: 'dsu-fill',
+										style: { width: percent + '%', background: usageBarColor(percent) }
+									})
+								),
+								window.resetsAt !== undefined
+									? React.createElement('div', { key: 'meta', className: 'dsu-meta' }, t('usage.resetsIn', { time: usageDelay(t, window.resetsAt) }))
+									: null
+							]));
+						});
+					}
+					if (row.usage && Array.isArray(row.usage.resetCredits) && row.usage.resetCredits.length > 0) {
+						section.push(React.createElement('div', { key: 'credits', className: 'dsu-meta' }, t('usage.resetCredits', { count: row.usage.resetCredits.length })));
+					}
+					children.push(React.createElement('div', { key: 'row' + index, className: 'dsu-section' }, section));
+				});
+			}
+
+			return React.createElement('div', { className: 'dsu-root' }, children);
+		}
+		//#endregion
+
+
 		//#region ModelSeatSlider
 		function ModelSeatSlider(props) {
-			const { locked, available, directory, load, select, t } = props;
+			const { locked, available, directory, load, select, t, rpc } = props;
 			// 官方模型标签（1017 徽标）注册在子 slot 上；替换座位后由我们代为渲染。
 			const renderSlot = typeof props.renderSlot === 'function' ? props.renderSlot : undefined;
 			const state = React.useSyncExternalStore((fn) => directory.subscribe(fn), () => directory.getSnapshot());
@@ -266,17 +525,6 @@ window.__ModuleLoader__.load({
 			const thumbClass = atTop ? ' ths-thumbTop' : atRunnerUp ? ' ths-thumbRunnerUp' : '';
 			// 强度字样跟随档位：次顶紫、最高走流动渐变，其余保持蓝色。
 			const effortClass = atTop ? ' ths-triggerEffortTop' : atRunnerUp ? ' ths-triggerEffortRunnerUp' : '';
-			// 根菜单的扩展插槽：其它插件（例如订阅用量）可以在「模型 / 思考强度」下方
-			// 追加内容，而不必替换整个模型座位。
-			const menuSlot = (() => {
-				if (typeof props.renderSlot !== 'function') return null;
-				try {
-					const rendered = props.renderSlot('conversation.input.model.menu', {});
-					return rendered === undefined ? null : rendered;
-				} catch {
-					return null;
-				}
-			})();
 			const modelLabel = currentChoice?.model.name ?? t('trigger.fallback');
 			const shownEffortLabel = currentEffort !== undefined ? currentEffort.label : effortLabel;
 			const triggerLabel = shownEffortLabel === undefined ? modelLabel : modelLabel + ' · ' + shownEffortLabel;
@@ -550,7 +798,7 @@ window.__ModuleLoader__.load({
 							React.createElement('span', { key: 'v', className: 'ths-cellValue ths-cellValueAccent' + effortClass }, shownEffortLabel),
 							React.createElement('span', { key: 'c', className: 'ths-cellChevron' }, React.createElement(IconChevronRight, {}))
 						]),
-						menuSlot !== null && React.createElement('div', { key: 'menuSlot', className: 'ths-menuSlot' }, menuSlot)
+						rpc !== undefined && React.createElement('div', { key: 'usage', className: 'ths-usageSlot' }, React.createElement(UsageSection, { rpc, t }))
 					]),
 					pane === 'model' && React.createElement(React.Fragment, { key: 'model' }, [
 						state.status === 'loading' && React.createElement('div', { key: 'loading', className: 'ths-status' }, t('status.loading')),
@@ -674,7 +922,7 @@ window.__ModuleLoader__.load({
 		 * and the slot entry is dropped. The object form ({ inject, apply }) is
 		 * the only declaration site — a bare function has none.
 		 */
-		const inject = ['locale', 'sessions', 'slots', 'modelDirectories', 'remote', 'remote.session'];
+		const inject = ['connection', 'locale', 'sessions', 'slots', 'modelDirectories', 'remote', 'remote.session'];
 
 		function apply(ctx) {
 			const locale = ctx.get('locale');
@@ -682,6 +930,8 @@ window.__ModuleLoader__.load({
 			ctx.effect(() => locale.register(NS, { zh, en }));
 			const slots = ctx.get('slots');
 			if (slots === undefined) return;
+			const connection = ctx.get('connection');
+			if (connection === undefined) return;
 			const sessions = ctx.get('sessions');
 			if (sessions === undefined) return;
 			slots.inject('conversation.input.model', () => {
@@ -689,14 +939,8 @@ window.__ModuleLoader__.load({
 				if (models === undefined) return () => {};
 				return slots.register({
 					name: 'conversation.input.model',
-					priority: -1,
+					priority: -2,
 					locale: NS,
-					// 新增的扩展插槽（不重声明 label：那个由原生座位声明，重复声明会抛错）。
-					children: { 'conversation.input.model.menu': {
-						kind: 'list',
-						scope: 'session',
-						inline: true
-					} },
 					inject: (sessionId) => {
 						const directory = models.directoryFor(sessionId);
 						const available = sessions.subagentAddress(sessionId) === undefined;
@@ -704,7 +948,8 @@ window.__ModuleLoader__.load({
 							available,
 							directory: directory.store,
 							load: () => { if (available) directory.load().catch(() => {}); },
-							select: (selection) => available ? directory.select(selection).then(() => true, () => false) : Promise.resolve(false)
+							select: (selection) => available ? directory.select(selection).then(() => true, () => false) : Promise.resolve(false),
+							rpc: connection.rpc
 						};
 					}
 				}, ModelSeatSlider);

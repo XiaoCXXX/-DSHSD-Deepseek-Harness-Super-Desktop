@@ -27,7 +27,7 @@ const DSH_VERSION = process.env.DSH_VERSION || '0.2.1-rc.2'
  * 已被取代的插件名：它们的源码已经不在仓库里，但老版本构建可能把它们留在 vendor/。
  * 留着会被打进安装包并重新启用，用户机器上就会出现两个挂件。
  */
-const LEGACY_PLUGIN_NAMES = ['dsh-whale-widget']
+const LEGACY_PLUGIN_NAMES = ['dsh-whale-widget', 'thinking-slider', 'dsh-subscription-usage']
 
 const log = (message) => console.log(`[stage] ${message}`)
 

@@ -52,21 +52,25 @@ const PET_SPEC = 'dsh-desktop-pet'
  * 改名之后如果不清理，用户升级上来会**同时加载两个挂件**（屏幕上两个小鲸鱼）。
  * 所以每次启动都检查一遍：在 bundles 里就摘掉，并把目录删掉。
  */
-const LEGACY_PLUGIN_NAMES = ['dsh-whale-widget']
+const LEGACY_PLUGIN_NAMES = ['dsh-whale-widget', 'thinking-slider', 'dsh-subscription-usage']
 /** 快速提问后端，便携悬浮窗靠它拿回答。源码在仓库的 plugins/ 下。 */
 const QUICK_NAME = 'dsh-quick-ask'
 /** 主题包：一次切换同时驱动 DSH 界面的 --dsw-* 令牌与客户端界面。同样在 plugins/ 下。 */
 const THEME_NAME = 'dsh-theme-pack'
 /**
- * 思考强度条。第三方插件，原作者 **Motuo24**（MIT）：
+ * 增强模型座位（DSH – Enhanced Model Support）：一个座位同时提供模型选择、
+ * 思考强度与订阅用量。
+ *
+ * 思考强度条的原作者是 **Motuo24**（MIT）：
  * https://github.com/Motuo24/dsh-thinking-slider
- * 它把输入区模型座位上的推理档位按钮列表换成可吸附的滑块。源码已内嵌在仓库
- * plugins/thinking-slider 下（含其 LICENSE），署名同时出现在两个 README 的
- * 第三方组件表里。
+ * 本仓库在其基础上合并了订阅用量、档位配色与 1017 徽标，源码内嵌在仓库的
+ * plugins/dsh-enhanced-model-support 下（含其 LICENSE），署名同时出现在两个
+ * README 的第三方组件表里。旧的 thinking-slider / dsh-subscription-usage 见
+ * LEGACY_PLUGIN_NAMES，升级时会被摘除。
  */
-const SLIDER_NAME = 'thinking-slider'
+const ENHANCED_NAME = 'dsh-enhanced-model-support'
 /** 随包分发、每次启动都要确保已启用的插件。 */
-const BUNDLED_PLUGINS = [PET_NAME, QUICK_NAME, THEME_NAME, SLIDER_NAME]
+const BUNDLED_PLUGINS = [PET_NAME, QUICK_NAME, THEME_NAME, ENHANCED_NAME]
 const OVERLAY_MARGIN = 14
 const DEFAULT_OVERLAY_SIZE = { width: 268, height: 46 }
 

@@ -1,0 +1,9 @@
+# Bundle self-activation patch.
+#
+# `dsh-app-boot` requires every entry in `dsh.profile.bundles` to resolve to a
+# package whose manifest declares `dsh.bundle`; this file is that declaration's
+# target. The row mounts the node half (inert) so the Loader has something to
+# mount; the browser half is discovered from `dsh.client` in package.json.
+- insert:
+    - id: enhanced-model-support
+      name: dsh-enhanced-model-support

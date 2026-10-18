@@ -45,7 +45,7 @@ of the uninstall entry.
 ### 1.2 Installation procedure
 
 1. Download `DSHSD-Setup-<version>.exe` from [Releases](../../releases). The current version is
-   `1.2.2-dsh0.2.1-rc.2`.
+   `1.3.0-dsh0.2.1-rc.2`.
 2. Run the installer and follow the prompts. Because the package installs machine-wide, Windows
    requests elevation once; approve it.
 3. The installer creates a **DSHSD** shortcut on the desktop and an uninstall entry in
@@ -431,7 +431,7 @@ third-party components, all under MIT:
 |---|---|---|
 | [DeepSeek Harness](https://www.npmjs.com/package/@deepseek-ai/dsh) (`@deepseek-ai/dsh` and its dependencies) | MIT | npm, fetched at build time by `tools/stage-vendor.js` |
 | [Whale balance widget](https://github.com/MeteorNOX/DeepSeek-Balance-Whale-Widget) | MIT © 2026 MeteorNOX | upstream project; developed further here as the bundled `dsh-desktop-pet` plugin, source embedded under `plugins/` |
-| [Thinking-strength slider](https://github.com/Motuo24/dsh-thinking-slider) | MIT © 2026 Motuo24 | upstream project; source embedded under `plugins/thinking-slider`, its `LICENSE` ships with it |
+| [Thinking-strength slider](https://github.com/Motuo24/dsh-thinking-slider) | MIT © 2026 Motuo24 | upstream project, merged into the bundled `dsh-enhanced-model-support` seat; its `LICENSE` ships as `LICENSE-thinking-slider` |
 | [Electron](https://github.com/electron/electron) | MIT | npm |
 
 Regarding the whale balance widget: the upstream project is licensed under **MIT**, which explicitly
