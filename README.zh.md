@@ -39,7 +39,7 @@ DSH 桌面客户端是 **DeepSeek Harness（DSH）** 的 Windows 桌面宿主程
 
 ### 1.2 安装步骤
 
-1. 从 [Releases](../../releases) 下载 `DSHSD-Setup-<版本>.exe`，当前版本为 `1.3.0-dsh0.2.1-rc.2`。
+1. 从 [Releases](../../releases) 下载 `DSHSD-Setup-<版本>.exe`，当前版本为 `1.3.1-dsh0.2.1-rc.2`。
 2. 运行安装程序并按提示操作。由于安装包为全机器安装，Windows 会请求一次提权，请予批准。
 3. 安装完成后，桌面会创建 **DSHSD** 快捷方式，并在「应用和功能」中登记卸载项。
 
@@ -297,6 +297,29 @@ npm run verify:build # 验证产物：运行打包后的可执行文件并探测
 - `vendor/plugins/<名称>/` —— 内置插件，取自本仓库的 `plugins/`。
 
 可用环境变量覆盖默认值：`DSH_VERSION`（默认 `0.2.1-rc.2`）。
+
+#### 代码签名
+
+安装包目前**未签名** —— `Get-AuthenticodeSignature` 报 `NotSigned`，因此 SmartScreen 会提示
+「Windows 已保护你的电脑」，直到该文件积累足够的下载信誉。
+
+electron-builder 会在提供签名证书时自动签名，无需改配置：
+
+```powershell
+$env:CSC_LINK = 'C:\path\to\certificate.pfx'   # 路径或 base64 编码的 PFX
+$env:CSC_KEY_PASSWORD = '...'
+npm run build                                   # 同时签名 exe、elevate.exe 与安装包
+```
+
+可信证书的获取方式（成本由低到高）：
+
+| 方式 | 说明 |
+| --- | --- |
+| SignPath Foundation | 开源项目免费，在 CI 中构建并签名 |
+| Azure Trusted Signing | 微软云签名，按月计费，需要身份验证 |
+| OV / EV 证书 | 年费；EV 证书可立即获得 SmartScreen 信誉 |
+
+自签名证书只对安装了其根证书的机器有效，不能替代上述方案。
 
 > **维护者注意。** electron-builder 的过滤器（`app-builder-lib/out/util/filter.js`）会无条件排除
 > 相对路径等于或以 `/node_modules` 结尾的目录，因此整棵 `node_modules` 会被静默地从

@@ -45,7 +45,7 @@ of the uninstall entry.
 ### 1.2 Installation procedure
 
 1. Download `DSHSD-Setup-<version>.exe` from [Releases](../../releases). The current version is
-   `1.3.0-dsh0.2.1-rc.2`.
+   `1.3.1-dsh0.2.1-rc.2`.
 2. Run the installer and follow the prompts. Because the package installs machine-wide, Windows
    requests elevation once; approve it.
 3. The installer creates a **DSHSD** shortcut on the desktop and an uninstall entry in
@@ -336,6 +336,31 @@ Vendor staging is performed by `tools/stage-vendor.js`:
 - `vendor/plugins/<name>/` — the bundled plugins, taken from `plugins/` in this repository.
 
 Two environment variables override the defaults: `DSH_VERSION` (default `0.2.1-rc.2`).
+
+#### Code signing
+
+The installer is currently **unsigned** — `Get-AuthenticodeSignature` reports `NotSigned` — so
+SmartScreen shows "Windows protected your PC" until the binary earns download reputation.
+
+electron-builder signs automatically when a code-signing certificate is supplied through the
+environment, so no configuration change is needed:
+
+```powershell
+$env:CSC_LINK = 'C:\path\to\certificate.pfx'   # path or base64-encoded PFX
+$env:CSC_KEY_PASSWORD = '...'
+npm run build                                   # signs the exe, elevate.exe and the installer
+```
+
+Options for a trusted certificate, in ascending cost:
+
+| Option | Notes |
+| --- | --- |
+| SignPath Foundation | Free for open-source projects; builds and signs in CI |
+| Azure Trusted Signing | Microsoft's cloud signing; monthly fee, identity validation required |
+| OV / EV certificate | Annual fee; EV certificates gain SmartScreen reputation immediately |
+
+A self-signed certificate only removes the warning on machines that have its root installed, so it
+is not a substitute for the options above.
 
 > **Maintainer note.** electron-builder's filter (`app-builder-lib/out/util/filter.js`)
 > unconditionally excludes any directory whose relative path is, or ends with, `/node_modules`, so an

@@ -154,11 +154,110 @@ function ensureOwnPlugins() {
   }
 }
 
+/**
+ * 删掉随包内核里运行时用不到的文件。
+ *
+ * 安装包真正的成本不是体积，而是**文件数**：6.3 万个文件让 NSIS 逐文件写盘，
+ * 装一次要很久。sourcemap、类型声明、文档、测试目录、别的架构的预编译
+ * 加起来约 2.7 万个文件 / 170 MB，删掉后安装明显变快。
+ *
+ * 保守原则：只删「确定不参与运行」的类别，且每类都把释放量记进日志，
+ * 出问题能立刻定位是哪一类删多了。
+ */
+const PRUNE_RULES = [
+  { name: 'sourcemaps', match: (file) => file.endsWith('.map') },
+  { name: 'type declarations', match: (file) => /\.d\.(ts|mts|cts)$/.test(file) },
+  { name: 'docs', match: (file) => /\.(md|markdown)$/i.test(file) && !/^(license|licence|copying|notice|third[-_]?party)/i.test(path.basename(file)) },
+  { name: 'tests', match: (file) => /[\\/](test|tests|__tests__|spec)[\\/]/.test(file) },
+  { name: 'foreign prebuilds', match: (file) => /[\\/](win32-arm64|arm64|aarch64|darwin|linux|android)[\\/]/i.test(file) }
+]
+
+function pruneVendorDsh() {
+  const root = path.join(VENDOR_DSH, 'node_modules')
+  if (!fs.existsSync(root)) return
+  const freed = new Map(PRUNE_RULES.map((rule) => [rule.name, { files: 0, bytes: 0 }]))
+  let visited = 0
+
+  const walk = (dir) => {
+    let entries
+    try {
+      entries = fs.readdirSync(dir, { withFileTypes: true })
+    } catch {
+      return
+    }
+    for (const entry of entries) {
+      const full = path.join(dir, entry.name)
+      // .bin 里是符号链接/脚本，删了会影响 bin 解析
+      if (entry.name === '.bin') continue
+      visited += 1
+      if (entry.isDirectory()) {
+        const rule = PRUNE_RULES.find((candidate) => candidate.name === 'foreign prebuilds' && candidate.match(full + path.sep))
+        if (rule) {
+          const size = directorySize(full)
+          fs.rmSync(full, { recursive: true, force: true })
+          freed.get(rule.name).files += size.files
+          freed.get(rule.name).bytes += size.bytes
+          continue
+        }
+        walk(full)
+        continue
+      }
+      if (!entry.isFile()) continue
+      const rule = PRUNE_RULES.find((candidate) => candidate.name !== 'foreign prebuilds' && candidate.match(full))
+      if (!rule) continue
+      try {
+        const { size } = fs.statSync(full)
+        fs.rmSync(full, { force: true })
+        freed.get(rule.name).files += 1
+        freed.get(rule.name).bytes += size
+      } catch {
+        // 只读文件删不掉就跳过，不值得让整次构建失败
+      }
+    }
+  }
+
+  const directorySize = (dir) => {
+    let files = 0
+    let bytes = 0
+    const stack = [dir]
+    while (stack.length > 0) {
+      const current = stack.pop()
+      let entries
+      try {
+        entries = fs.readdirSync(current, { withFileTypes: true })
+      } catch {
+        continue
+      }
+      for (const entry of entries) {
+        const full = path.join(current, entry.name)
+        if (entry.isDirectory()) stack.push(full)
+        else if (entry.isFile()) {
+          files += 1
+          try { bytes += fs.statSync(full).size } catch { /* 忽略 */ }
+        }
+      }
+    }
+    return { files, bytes }
+  }
+
+  walk(root)
+  let totalFiles = 0
+  let totalBytes = 0
+  for (const [name, stat] of freed) {
+    if (stat.files === 0) continue
+    totalFiles += stat.files
+    totalBytes += stat.bytes
+    log(`裁剪 ${name}：${stat.files} 个文件，${(stat.bytes / 1024 / 1024).toFixed(1)} MB`)
+  }
+  log(`裁剪完成：共 ${totalFiles} 个文件，${(totalBytes / 1024 / 1024).toFixed(1)} MB（遍历 ${visited} 项）`)
+}
+
 try {
   ensureDsh()
   // 桌面客户端的 DSH 跑在 Electron（无控制台的 GUI 进程）里，不补这个标志的话
   // 每条 shell 命令都会弹出一个可见的控制台窗口。
   patchDshRoot(VENDOR_DSH, log)
+  pruneVendorDsh()
   removeLegacyVendored()
   ensureOwnPlugins()
   log('物料准备完成')
