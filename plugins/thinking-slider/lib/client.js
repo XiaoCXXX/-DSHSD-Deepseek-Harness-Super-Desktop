@@ -74,6 +74,7 @@ window.__ModuleLoader__.load({
 .ths-cellValue{color:var(--dsw-alias-label-caption);text-overflow:ellipsis;white-space:nowrap;max-width:110px;overflow:hidden}
 .ths-cellValueAccent{color:#4a9eff}
 .ths-releaseBadge{display:inline-flex;align-items:center;margin-left:4px;padding:0 5px;height:16px;border-radius:4px;font-size:10px;font-weight:600;line-height:16px;color:#4a9eff;background:rgba(74,158,255,.15);vertical-align:baseline}
+.ths-menuSlot{margin-top:2px;padding-top:4px;border-top:1px solid var(--dsw-alias-border-l3);max-height:240px;overflow:auto}
 .ths-triggerEffortRunnerUp{color:#a97bff}
 .ths-triggerEffortTop{background-image:linear-gradient(90deg,#4a9eff 0%,#a97bff 25%,#ff7ac0 50%,#a97bff 75%,#4a9eff 100%);background-size:200% 100%;animation:ths-topFlow 1.5s linear infinite;-webkit-background-clip:text;background-clip:text;-webkit-text-fill-color:transparent;color:transparent}
 .ths-cellChevron{color:var(--dsw-alias-label-caption);flex:none;display:flex}
@@ -265,6 +266,17 @@ window.__ModuleLoader__.load({
 			const thumbClass = atTop ? ' ths-thumbTop' : atRunnerUp ? ' ths-thumbRunnerUp' : '';
 			// 强度字样跟随档位：次顶紫、最高走流动渐变，其余保持蓝色。
 			const effortClass = atTop ? ' ths-triggerEffortTop' : atRunnerUp ? ' ths-triggerEffortRunnerUp' : '';
+			// 根菜单的扩展插槽：其它插件（例如订阅用量）可以在「模型 / 思考强度」下方
+			// 追加内容，而不必替换整个模型座位。
+			const menuSlot = (() => {
+				if (typeof props.renderSlot !== 'function') return null;
+				try {
+					const rendered = props.renderSlot('conversation.input.model.menu', {});
+					return rendered === undefined ? null : rendered;
+				} catch {
+					return null;
+				}
+			})();
 			const modelLabel = currentChoice?.model.name ?? t('trigger.fallback');
 			const shownEffortLabel = currentEffort !== undefined ? currentEffort.label : effortLabel;
 			const triggerLabel = shownEffortLabel === undefined ? modelLabel : modelLabel + ' · ' + shownEffortLabel;
@@ -537,7 +549,8 @@ window.__ModuleLoader__.load({
 							React.createElement('span', { key: 'l', className: 'ths-cellLabel' }, t('menu.effort')),
 							React.createElement('span', { key: 'v', className: 'ths-cellValue ths-cellValueAccent' + effortClass }, shownEffortLabel),
 							React.createElement('span', { key: 'c', className: 'ths-cellChevron' }, React.createElement(IconChevronRight, {}))
-						])
+						]),
+						menuSlot !== null && React.createElement('div', { key: 'menuSlot', className: 'ths-menuSlot' }, menuSlot)
 					]),
 					pane === 'model' && React.createElement(React.Fragment, { key: 'model' }, [
 						state.status === 'loading' && React.createElement('div', { key: 'loading', className: 'ths-status' }, t('status.loading')),
@@ -678,6 +691,12 @@ window.__ModuleLoader__.load({
 					name: 'conversation.input.model',
 					priority: -1,
 					locale: NS,
+					// 新增的扩展插槽（不重声明 label：那个由原生座位声明，重复声明会抛错）。
+					children: { 'conversation.input.model.menu': {
+						kind: 'list',
+						scope: 'session',
+						inline: true
+					} },
 					inject: (sessionId) => {
 						const directory = models.directoryFor(sessionId);
 						const available = sessions.subagentAddress(sessionId) === undefined;
